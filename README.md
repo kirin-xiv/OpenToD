@@ -1,76 +1,108 @@
-> ⚠️ **Don't click Fork!**
-> 
-> This is a GitHub Template repo. If you want to use this for a plugin, just [use this template][new-repo] to make a new repo!
->
-> ![image](https://github.com/goatcorp/SamplePlugin/assets/16760685/d9732094-e1ed-4769-a70b-58ed2b92580c)
+Truth or Dare Plugin for FFXIV
+A Dalamud plugin that automates Truth or Dare game management with automatic roll tracking and winner calculation.
+Features
 
-# SamplePlugin
+🎲 Automatic Roll Detection - Monitors party chat for /random rolls
+🏆 Smart Winner Selection - Highest roll wins, but skips repeat winners
+👕 Strip Detection - Automatically identifies players who rolled under 100
+⏱️ Manual Processing - Click to process rolls when ready
+💾 Persistent State - Remembers the last winner between sessions
+🖥️ Real-time UI - Live display of current rolls with color coding
 
-[![Use This Template badge](https://img.shields.io/badge/Use%20This%20Template-0?logo=github&labelColor=grey)][new-repo]
+Installation
+Prerequisites
 
+XIVLauncher with Dalamud enabled
+FFXIV with party chat access
 
-Simple example plugin for Dalamud.
+Installation Steps
 
-This is not designed to be the simplest possible example, but it is also not designed to cover everything you might want to do. For more detailed questions, come ask in [the Discord](https://discord.gg/holdshift).
+Download the latest release from the Releases page
+Extract the plugin files to your Dalamud devPlugins folder:
 
-## Main Points
-
-* Simple functional plugin
-  * Slash command
-  * Main UI
-  * Settings UI
-  * Image loading
-  * Plugin json
-* Simple, slightly-improved plugin configuration handling
-* Project organization
-  * Copies all necessary plugin files to the output directory
-    * Does not copy dependencies that are provided by dalamud
-    * Output directory can be zipped directly and have exactly what is required
-  * Hides data files from visual studio to reduce clutter
-    * Also allows having data files in different paths than VS would usually allow if done in the IDE directly
+Windows: %appdata%\XIVLauncher\devPlugins\TruthOrDarePlugin\
 
 
-The intention is less that any of this is used directly in other projects, and more to show how similar things can be done.
+Restart FFXIV or reload Dalamud plugins
+Enable the plugin in the Dalamud plugin installer
 
-## How To Use
+Usage
+Starting a Game
 
-### Getting Started
+Open the plugin window: Type /tod in chat
+Start the game: Click the "Start Game" button
+Announce to party: Tell everyone to type /random in party chat
+Watch the rolls: Rolls will appear automatically in the plugin window
 
-To begin, [clone this template repository][new-repo] to your own GitHub account. This will automatically bring in everything you need to get a jumpstart on development. You do not need to fork this repository unless you intend to contribute modifications to it.
+Processing Results
 
-Be sure to also check out the [Dalamud Developer Docs][dalamud-docs] for helpful information about building your own plugin. The Developer Docs includes helpful information about all sorts of things, including [how to submit][submit] your newly-created plugin to the official repository. Assuming you use this template repository, the provided project build configuration and license are already chosen to make everything a breeze.
+Wait for rolls: Let everyone roll their /random
+Process when ready: Click "Process Rolls" button
+See the results: Winner and strip list will be announced in chat
 
-[new-repo]: https://github.com/new?template_name=SamplePlugin&template_owner=goatcorp
-[dalamud-docs]: https://dalamud.dev
-[submit]: https://dalamud.dev/plugin-development/plugin-submission
+Commands
 
-### Prerequisites
+/tod - Opens the Truth or Dare control window
 
-SamplePlugin assumes all the following prerequisites are met:
+How It Works
+Roll Detection
+The plugin automatically monitors party chat for messages matching the pattern:
+Random! [Player Name] rolls a [number]
+Winner Logic
 
-* XIVLauncher, FINAL FANTASY XIV, and Dalamud have all been installed and the game has been run with Dalamud at least once.
-* XIVLauncher is installed to its default directories and configurations.
-  * If a custom path is required for Dalamud's dev directory, it must be set with the `DALAMUD_HOME` environment variable.
-* A .NET Core 8 SDK has been installed and configured, or is otherwise available. (In most cases, the IDE will take care of this.)
+Highest roll wins - Player with the highest number is selected
+Skip repeat winners - If the highest roller won the last round, the next highest wins
+Strip detection - Players who rolled under 100 are added to the strip list
 
-### Building
+Example Output
+[T/D] PlayerName wins (756) | Strip: LowRoller1, LowRoller2
+Interface
+Main Window
 
-1. Open up `SamplePlugin.sln` in your C# editor of choice (likely [Visual Studio 2022](https://visualstudio.microsoft.com) or [JetBrains Rider](https://www.jetbrains.com/rider/)).
-2. Build the solution. By default, this will build a `Debug` build, but you can switch to `Release` in your IDE.
-3. The resulting plugin can be found at `SamplePlugin/bin/x64/Debug/SamplePlugin.dll` (or `Release` if appropriate.)
+Game Status - Shows if a game is currently active
+Current Rolls - Live display of all detected rolls
 
-### Activating in-game
+Red text for rolls under 100 (strip)
+Normal text for safe rolls
 
-1. Launch the game and use `/xlsettings` in chat or `xlsettings` in the Dalamud Console to open up the Dalamud settings.
-    * In here, go to `Experimental`, and add the full path to the `SamplePlugin.dll` to the list of Dev Plugin Locations.
-2. Next, use `/xlplugins` (chat) or `xlplugins` (console) to open up the Plugin Installer.
-    * In here, go to `Dev Tools > Installed Dev Plugins`, and the `SamplePlugin` should be visible. Enable it.
-3. You should now be able to use `/pmycommand` (chat) or `pmycommand` (console)!
 
-Note that you only need to add it to the Dev Plugin Locations once (Step 1); it is preserved afterwards. You can disable, enable, or load your plugin on startup through the Plugin Installer.
+Control Buttons:
 
-### Reconfiguring for your own uses
+Start Game
+Stop Game
+Process Rolls
+Clear Last Winner
 
-Basically, just replace all references to `SamplePlugin` in all of the files and filenames with your desired name, then start building the plugin of your dreams. You'll figure it out 😁
 
-Dalamud will load the JSON file (by default, `SamplePlugin/SamplePlugin.json`) next to your DLL and use it for metadata, including the description for your plugin in the Plugin Installer. Make sure to update this with information relevant to _your_ plugin!
+
+Roll Display
+Rolls are displayed in descending order with color coding:
+
+🔴 Red - Rolls under 100 (strip)
+⚪ White - Normal rolls
+
+Configuration
+The plugin automatically saves:
+
+Last Winner - Prevents the same person from winning consecutive rounds
+Window Preferences - Remembers window size and position
+
+To reset the last winner, click the "Clear Last Winner" button.
+Troubleshooting
+Rolls Not Being Detected
+
+Ensure you're in a party
+Check that players are using /random (not /roll or other commands)
+Verify the plugin window shows "Game Active: Yes"
+
+Plugin Not Loading
+
+Check that the plugin files are in the correct directory
+Restart FFXIV or reload Dalamud plugins
+Check the Dalamud log (/xllog) for error messages
+
+Window Not Appearing
+
+Try typing /tod again
+Check if the window is minimized or off-screen
+Restart the plugin through the Dalamud plugin manager
