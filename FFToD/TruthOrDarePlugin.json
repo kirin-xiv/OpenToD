@@ -1,0 +1,10 @@
+// =============================================================================
+// TruthOrDarePlugin.json (Manifest File)
+// =============================================================================
+{
+    "Name": "Truth or Dare Plugin",
+    "Author": "Ellise",
+    "Punchline": "Automates Truth or Dare game management with roll tracking and winner calculation.",
+    "Description": "A comprehensive plugin that automates Truth or Dare games in FFXIV. Features include automatic roll parsing from chat, smart winner selection (skipping repeat winners), strip detection for low rolls, configurable timeouts, and automatic result posting. Eliminates the need for manual chat copying and external scripts.",
+    "RepoUrl": "https://github.com/kirin-xiv/TruthOrDarePlugin"
+}

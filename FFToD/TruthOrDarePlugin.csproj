@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Dalamud.NET.Sdk/12.0.2">
+    <PropertyGroup>
+        <Version>1.0.0.0</Version>
+        <Description>Automates Truth or Dare game management with roll tracking and winner calculation.</Description>
+        <PackageProjectUrl>https://github.com/yourusername/SamplePlugin</PackageProjectUrl>
+        <PackageLicenseExpression>AGPL-3.0-or-later</PackageLicenseExpression>
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+    <ItemGroup>
+        <Content Include="TruthOrDarePlugin.json" />
+    </ItemGroup>
+</Project>
