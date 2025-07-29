@@ -5,13 +5,15 @@
     "AssemblyVersion": "1.0.0.0",
     "Description": "Automates Truth or Dare mini-game in party/alliance chat. Handles announcements, roll collection, winner determination, and strip list.",
     "ApplicableVersion": "any",
-    "RepoUrl": "https://github.com/yourusername/FFToD",
+    "RepoUrl": "https://github.com/kirin-xiv/FFToD",
     "Tags": [
         "minigame",
         "social",
-        "chat"
+        "chat",
+        "automation",
+        "rolls"
     ],
-    "DalamudApiLevel": 10,
+    "DalamudApiLevel": 11,
     "LoadRequiredState": 0,
     "LoadSync": false,
     "CanUnloadAsync": false,

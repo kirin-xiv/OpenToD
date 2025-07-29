@@ -9,7 +9,7 @@
         <PackageProjectUrl>https://github.com/kirin-xiv/FFToD</PackageProjectUrl>
         <PackageLicenseExpression>MIT</PackageLicenseExpression>
         <IsPackable>false</IsPackable>
-        <DalamudApiLevel>10</DalamudApiLevel>
+        <DalamudApiLevel>11</DalamudApiLevel>
         <TargetFramework>net9.0-windows</TargetFramework>
     </PropertyGroup>
 
@@ -22,8 +22,4 @@
     <PropertyGroup Condition="'$([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform($([System.Runtime.InteropServices.OSPlatform]::Linux)))'">
         <DalamudLibPath>$(DALAMUD_HOME)</DalamudLibPath>
     </PropertyGroup>
-
-    <ItemGroup>
-        <PackageReference Include="DalamudPackager" Version="2.1.13" />
-    </ItemGroup>
 </Project>

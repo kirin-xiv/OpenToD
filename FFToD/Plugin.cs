@@ -163,8 +163,9 @@ public sealed class Plugin : IDalamudPlugin
             return;
 
         // Check if this is a roll message by pattern
-        // Random messages appear as "Random! <player> rolls a <number>." regardless of chat type
-        var rollMatch = Regex.Match(messageText, @"Random! (.+) rolls a (\d+)\.");
+        // Random messages appear as "Random! <player> rolls a <number>." for others
+        // or "Random! You roll a <number>." for yourself
+        var rollMatch = Regex.Match(messageText, @"Random! (.+) rolls? a (\d+)\.");
         if (!rollMatch.Success)
             return;
 
