@@ -1,6 +1,7 @@
 using Dalamud.Interface.Windowing;
 using ImGuiNET;
 using System;
+using System.Linq;
 using System.Numerics;
 
 namespace FFToD;
@@ -96,13 +97,13 @@ public class MainWindow : Window, IDisposable
             ImGui.Text("Current Rolls:");
             ImGui.Spacing();
 
-            if (ImGui.BeginTable("RollsTable", 2, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.Sortable))
+            if (ImGui.BeginTable("RollsTable", 2, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg))
             {
                 ImGui.TableSetupColumn("Player", ImGuiTableColumnFlags.WidthStretch);
                 ImGui.TableSetupColumn("Roll", ImGuiTableColumnFlags.WidthFixed, 80);
                 ImGui.TableHeadersRow();
 
-                foreach (var (player, roll) in rolls)
+                foreach (var (player, roll) in rolls.OrderByDescending(kvp => kvp.Value))
                 {
                     ImGui.TableNextRow();
                     ImGui.TableNextColumn();
@@ -120,6 +121,35 @@ public class MainWindow : Window, IDisposable
 
                 ImGui.EndTable();
             }
+
+            // ✅ Winner & Stripper Summary
+            var sorted = rolls.OrderByDescending(kvp => kvp.Value).ToList();
+
+            // Determine winner
+            string winnerDisplay = "None";
+            if (sorted.Count > 0)
+            {
+                foreach (var roll in sorted)
+                {
+                    if (roll.Key != configuration.LastWinner)
+                    {
+                        winnerDisplay = $"{roll.Key} ({roll.Value})";
+                        break;
+                    }
+                }
+
+                if (winnerDisplay == "None")
+                {
+                    winnerDisplay = $"{sorted[0].Key} ({sorted[0].Value})"; // fallback
+                }
+            }
+
+            // Determine strippers (roll <= 100)
+            var strippers = rolls.Where(kvp => kvp.Value <= 100).Select(kvp => kvp.Key).ToList();
+            string stripListDisplay = strippers.Count > 0 ? string.Join(", ", strippers) : "None";
+
+            ImGui.Separator();
+            ImGui.TextColored(new Vector4(1f, 0.85f, 0.2f, 1), $"Winner: {winnerDisplay} | Strippers: {stripListDisplay}");
         }
         else
         {

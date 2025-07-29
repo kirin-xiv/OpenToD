@@ -189,8 +189,20 @@ public sealed class Plugin : IDalamudPlugin
             }
         }
 
-        // Store the roll (latest roll overwrites previous)
-        currentRolls[normalizedName] = rollValue;
+        // Only accept the first roll from each player
+        if (!currentRolls.ContainsKey(normalizedName))
+        {
+            currentRolls[normalizedName] = rollValue;
+
+            if (configuration.EnableDebugLogging)
+                pluginLog.Debug($"First roll recorded: {normalizedName} = {rollValue} (ChatType: {type} [{(int)type}])");
+        }
+        else
+        {
+            if (configuration.EnableDebugLogging)
+                pluginLog.Debug($"Ignored duplicate roll from {normalizedName}");
+        }
+
 
         if (configuration.EnableDebugLogging)
             pluginLog.Debug($"Roll captured: {normalizedName} = {rollValue} (ChatType: {type} [{(int)type}])");
@@ -300,6 +312,7 @@ public sealed class Plugin : IDalamudPlugin
         var sortedRolls = currentRolls.OrderByDescending(kvp => kvp.Value).ToList();
         string winner = "";
         int winnerRoll = 0;
+        bool forcedRepeatWinner = false;
 
         foreach (var roll in sortedRolls)
         {
@@ -311,29 +324,38 @@ public sealed class Plugin : IDalamudPlugin
             }
         }
 
+        // Fallback if only last winner rolled
         if (string.IsNullOrEmpty(winner) && sortedRolls.Count > 0)
         {
-            // Everyone who rolled was the last winner, just pick the highest
             winner = sortedRolls[0].Key;
             winnerRoll = sortedRolls[0].Value;
+            forcedRepeatWinner = true;
         }
 
         // Find strip list
         var stripList = currentRolls.Where(kvp => kvp.Value <= 100).Select(kvp => kvp.Key).ToList();
 
-        // Announce results
+        // Format messages
         var stripMessage = stripList.Count > 0 ? string.Join(", ", stripList) : "None";
         var resultMessage = $"[T/D] {winner} wins ({winnerRoll}) | Strip: {stripMessage} | Keep T/D in /yell! Dares can be 3 rounds max.";
 
         _ = SendYellAsync(resultMessage);
 
-        // Update last winner
-        configuration.LastWinner = winner;
-        configuration.Save();
+        // 🔽 Print summary locally for manual copy/paste
+        var summaryMessage = $"Winner: {winner} ({winnerRoll}) | Strippers: {stripMessage}";
+        chatGui.Print(summaryMessage);
+
+        // ✅ Update last winner only if not forced repeat
+        if (!forcedRepeatWinner)
+        {
+            configuration.LastWinner = winner;
+            configuration.Save();
+        }
 
         if (configuration.EnableDebugLogging)
             pluginLog.Debug($"Game complete. Winner: {winner} ({winnerRoll}). Strip list: {stripMessage}");
     }
+
 
     private async Task SendYellAsync(string message)
     {
