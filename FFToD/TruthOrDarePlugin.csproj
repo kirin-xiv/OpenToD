@@ -9,7 +9,7 @@
         <PackageProjectUrl>https://github.com/kirin-xiv/FFToD</PackageProjectUrl>
         <PackageLicenseExpression>MIT</PackageLicenseExpression>
         <IsPackable>false</IsPackable>
-        <DalamudApiLevel>11</DalamudApiLevel>
+        <DalamudApiLevel>12</DalamudApiLevel>
         <TargetFramework>net9.0-windows</TargetFramework>
     </PropertyGroup>
 
