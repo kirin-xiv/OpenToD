@@ -350,7 +350,7 @@ public sealed class Plugin : IDalamudPlugin
         _ = SendYellAsync(resultMessage);
 
         // 🔽 Print summary locally for manual copy/paste
-        var summaryMessage = $"Winner: {winner} ({winnerRoll}) | Strippers: {stripMessage}";
+        var summaryMessage = $"/yell Winner: {winner} ({winnerRoll}) | Strippers: {stripMessage}";
         chatGui.Print(summaryMessage);
 
         // ✅ Update last winner only if not forced repeat
