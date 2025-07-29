@@ -210,12 +210,27 @@ public sealed class Plugin : IDalamudPlugin
 
     private string NormalizePlayerName(string name)
     {
+<<<<<<< Updated upstream
         // Remove server suffix if present
         var parts = name.Split(' ');
         if (parts.Length >= 3 && serverNames.Contains(parts[^1]))
         {
             return string.Join(' ', parts.Take(parts.Length - 1));
+=======
+        // Remove world name if it's the last word or suffix
+        foreach (var server in serverNames)
+        {
+            if (name.EndsWith($" {server}", StringComparison.OrdinalIgnoreCase))
+                return name.Substring(0, name.Length - server.Length - 1);
+
+            if (name.EndsWith(server, StringComparison.OrdinalIgnoreCase))
+            {
+                var index = name.LastIndexOf(server, StringComparison.OrdinalIgnoreCase);
+                return name.Substring(0, index).Trim();
+            }
+>>>>>>> Stashed changes
         }
+
         return name;
     }
 
