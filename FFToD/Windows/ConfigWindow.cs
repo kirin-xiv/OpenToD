@@ -1,146 +1,156 @@
-// ========================================
-// Windows/ConfigWindow.cs - REPLACE ENTIRE CONTENT
-// ========================================
-using System;
-using System.Numerics;
 using Dalamud.Interface.Windowing;
 using ImGuiNET;
-using Dalamud.Game.Text;
+using System;
+using System.Numerics;
 
-namespace TruthOrDarePlugin.Windows
+namespace FFToD;
+
+public class ConfigWindow : Window, IDisposable
 {
-    public class ConfigWindow : Window, IDisposable
+    private readonly Configuration configuration;
+
+    public ConfigWindow(Configuration configuration)
+        : base("Truth or Dare Configuration##ConfigWindow", ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse)
     {
-        private readonly Configuration _configuration;
-        private readonly Plugin _plugin;
+        this.configuration = configuration;
 
-        public ConfigWindow(Plugin plugin) : base("Truth or Dare Configuration###TruthOrDareConfig")
+        Size = new Vector2(400, 450);
+        SizeCondition = ImGuiCond.Always;
+    }
+
+    public void Dispose()
+    {
+    }
+
+    public override void Draw()
+    {
+        // Game Settings
+        if (ImGui.CollapsingHeader("Game Settings", ImGuiTreeNodeFlags.DefaultOpen))
         {
-            Flags = ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoScrollbar |
-                    ImGuiWindowFlags.NoScrollWithMouse;
+            var minRolls = configuration.MinimumRolls;
+            if (ImGui.SliderInt("Minimum Rolls", ref minRolls, 1, 10))
+            {
+                configuration.MinimumRolls = minRolls;
+                configuration.Save();
+            }
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Minimum number of rolls required to process results");
 
-            Size = new Vector2(500, 600);
-            SizeCondition = ImGuiCond.Always;
+            var waitTime = configuration.WaitTime;
+            if (ImGui.SliderInt("Wait Time (seconds)", ref waitTime, 1, 30))
+            {
+                configuration.WaitTime = waitTime;
+                configuration.Save();
+            }
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Time to wait before auto-processing results");
 
-            _plugin = plugin;
-            _configuration = plugin.Configuration;
+            var rollTimeout = configuration.RollTimeout;
+            if (ImGui.SliderInt("Roll Timeout (seconds)", ref rollTimeout, 5, 60))
+            {
+                configuration.RollTimeout = rollTimeout;
+                configuration.Save();
+            }
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Time to wait for rolls before closing");
+
+            // Chat type dropdown
+            var currentChatType = (int)configuration.ChatType;
+            var chatTypes = Enum.GetNames(typeof(ChatType));
+            if (ImGui.Combo("Chat Type", ref currentChatType, chatTypes, chatTypes.Length))
+            {
+                configuration.ChatType = (ChatType)currentChatType;
+                configuration.Save();
+            }
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Chat channel to use for announcements");
         }
 
-        public void Dispose()
+        ImGui.Separator();
+
+        // Announcements
+        if (ImGui.CollapsingHeader("Announcements", ImGuiTreeNodeFlags.DefaultOpen))
         {
+            var customAnnouncement = configuration.CustomAnnouncement ?? "";
+            if (ImGui.InputText("Custom Announcement", ref customAnnouncement, 200))
+            {
+                configuration.CustomAnnouncement = customAnnouncement;
+                configuration.Save();
+            }
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Optional custom message to include in game start announcements");
         }
 
-        public override void Draw()
+        ImGui.Separator();
+
+        // Player Settings
+        if (ImGui.CollapsingHeader("Player Settings", ImGuiTreeNodeFlags.DefaultOpen))
         {
-            ImGui.Text("Game Settings");
-            ImGui.Separator();
-
-            var minRolls = _configuration.MinimumRolls;
-            if (ImGui.SliderInt("Minimum Rolls", ref minRolls, 1, 8))
+            var localPlayerName = configuration.LocalPlayerName ?? "";
+            if (ImGui.InputText("Your Character Name", ref localPlayerName, 50))
             {
-                _configuration.MinimumRolls = minRolls;
-                _configuration.Save();
+                configuration.LocalPlayerName = localPlayerName;
+                configuration.Save();
             }
             if (ImGui.IsItemHovered())
-                ImGui.SetTooltip("Minimum number of rolls before auto-processing");
+                ImGui.SetTooltip("Your character name (used to replace 'You' in roll messages)");
 
-            var minWait = _configuration.MinimumWaitTime;
-            if (ImGui.SliderInt("Minimum Wait Time (seconds)", ref minWait, 1, 30))
+            ImGui.Text("Last Winner:");
+            ImGui.SameLine();
+            if (!string.IsNullOrEmpty(configuration.LastWinner))
             {
-                _configuration.MinimumWaitTime = minWait;
-                _configuration.Save();
+                ImGui.TextColored(new Vector4(0, 1, 0, 1), configuration.LastWinner);
+                ImGui.SameLine();
+                if (ImGui.SmallButton("Clear"))
+                {
+                    configuration.LastWinner = "";
+                    configuration.Save();
+                }
             }
-            if (ImGui.IsItemHovered())
-                ImGui.SetTooltip("Minimum time to wait before auto-processing rolls");
-
-            var timeout = _configuration.RollTimeout;
-            if (ImGui.SliderInt("Roll Timeout (seconds)", ref timeout, 10, 60))
+            else
             {
-                _configuration.RollTimeout = timeout;
-                _configuration.Save();
-            }
-            if (ImGui.IsItemHovered())
-                ImGui.SetTooltip("Maximum time to wait for rolls before processing");
-
-            ImGui.Spacing();
-
-            ImGui.Text("Chat Settings");
-            ImGui.Separator();
-
-            var chatTypes = new[] { "Say", "Yell", "Party", "Echo" };
-
-            var currentAnnouncement = GetChatTypeIndex(_configuration.AnnouncementChatType);
-            if (ImGui.Combo("Announcement Chat Type", ref currentAnnouncement, chatTypes, chatTypes.Length))
-            {
-                _configuration.AnnouncementChatType = GetChatTypeFromIndex(currentAnnouncement);
-                _configuration.Save();
-            }
-
-            var currentResult = GetChatTypeIndex(_configuration.ResultChatType);
-            if (ImGui.Combo("Result Chat Type", ref currentResult, chatTypes, chatTypes.Length))
-            {
-                _configuration.ResultChatType = GetChatTypeFromIndex(currentResult);
-                _configuration.Save();
-            }
-
-            ImGui.Spacing();
-
-            ImGui.Text("Custom Messages");
-            ImGui.Separator();
-
-            var customAnnouncement = _configuration.CustomAnnouncement;
-            if (ImGui.InputTextMultiline("Custom Announcement", ref customAnnouncement, 500, new Vector2(-1, 100)))
-            {
-                _configuration.CustomAnnouncement = customAnnouncement;
-                _configuration.Save();
-            }
-            if (ImGui.IsItemHovered())
-                ImGui.SetTooltip("Leave empty to use default announcement");
-
-            ImGui.Spacing();
-
-            ImGui.Text("Debug Settings");
-            ImGui.Separator();
-
-            var showDebug = _configuration.ShowDebugInfo;
-            if (ImGui.Checkbox("Show Debug Info", ref showDebug))
-            {
-                _configuration.ShowDebugInfo = showDebug;
-                _configuration.Save();
-            }
-
-            ImGui.Spacing();
-
-            ImGui.Text("Current State");
-            ImGui.Separator();
-            ImGui.Text($"Last Winner: {_configuration.LastWinner ?? "None"}");
-
-            if (ImGui.Button("Clear Last Winner"))
-            {
-                _plugin.ClearLastWinner();
+                ImGui.TextDisabled("None");
             }
         }
 
-        private static int GetChatTypeIndex(XivChatType chatType)
+        ImGui.Separator();
+
+        // Debug Settings
+        if (ImGui.CollapsingHeader("Debug Settings"))
         {
-            return chatType switch
+            var enableDebug = configuration.EnableDebugLogging;
+            if (ImGui.Checkbox("Enable Debug Logging", ref enableDebug))
             {
-                XivChatType.Say => 0,
-                XivChatType.Yell => 1,
-                XivChatType.Party => 2,
-                _ => 3
-            };
+                configuration.EnableDebugLogging = enableDebug;
+                configuration.Save();
+            }
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Enable verbose logging to the Dalamud log");
+
+            var logAllChat = configuration.LogAllChatTypes;
+            if (ImGui.Checkbox("Log All Chat Types", ref logAllChat))
+            {
+                configuration.LogAllChatTypes = logAllChat;
+                configuration.Save();
+            }
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Log all chat messages with 'Random!' to help debug roll detection");
         }
 
-        private static XivChatType GetChatTypeFromIndex(int index)
+        ImGui.Separator();
+
+        // Save button
+        if (ImGui.Button("Save & Close", new Vector2(120, 30)))
         {
-            return index switch
-            {
-                0 => XivChatType.Say,
-                1 => XivChatType.Yell,
-                2 => XivChatType.Party,
-                _ => XivChatType.Echo
-            };
+            configuration.Save();
+            IsOpen = false;
+        }
+
+        ImGui.SameLine();
+
+        if (ImGui.Button("Close", new Vector2(120, 30)))
+        {
+            IsOpen = false;
         }
     }
 }
