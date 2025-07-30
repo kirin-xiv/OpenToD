@@ -1,6 +1,7 @@
 using Dalamud.Interface.Windowing;
 using ImGuiNET;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 
@@ -44,8 +45,8 @@ public class MainWindow : Window, IDisposable
             ImGui.TextColored(new Vector4(1, 0, 0, 1), "No game active");
         }
 
-        var rolls = plugin.GetCurrentRolls();
-        ImGui.Text($"Current rolls: {rolls.Count}");
+        var gameRolls = plugin.GetCurrentRolls();
+        ImGui.Text($"Current rolls: {gameRolls.Count}");
 
         if (!string.IsNullOrEmpty(configuration.LastWinner))
             ImGui.Text($"Last winner: {configuration.LastWinner}");
@@ -70,7 +71,7 @@ public class MainWindow : Window, IDisposable
         {
             if (ImGui.Button("Start Game", new Vector2(120, 30)))
             {
-                _ = plugin.StartGameAsync();
+                plugin.StartGame();
             }
         }
 
@@ -85,14 +86,13 @@ public class MainWindow : Window, IDisposable
 
         if (ImGui.Button("Configuration", new Vector2(120, 30)))
         {
-            // Open configuration window
             plugin.OpenConfigWindow();
         }
 
         ImGui.Separator();
 
         // Rolls table
-        if (rolls.Count > 0)
+        if (gameRolls.Count > 0)
         {
             ImGui.Text("Current Rolls:");
             ImGui.Spacing();
@@ -103,50 +103,73 @@ public class MainWindow : Window, IDisposable
                 ImGui.TableSetupColumn("Roll", ImGuiTableColumnFlags.WidthFixed, 80);
                 ImGui.TableHeadersRow();
 
-                foreach (var (player, roll) in rolls.OrderByDescending(kvp => kvp.Value))
+                // Convert to list and sort manually to avoid lambda conflicts
+                var rollsList = new List<KeyValuePair<string, int>>();
+                foreach (var item in gameRolls)
                 {
+                    rollsList.Add(new KeyValuePair<string, int>(item.Key, item.Value));
+                }
+                rollsList.Sort((a, b) => b.Value.CompareTo(a.Value)); // Sort by value descending
+
+                foreach (var rollItem in rollsList)
+                {
+                    var playerName = rollItem.Key;
+                    var rollValue = rollItem.Value;
+
                     ImGui.TableNextRow();
                     ImGui.TableNextColumn();
-                    ImGui.Text(player);
+                    ImGui.Text(playerName);
                     ImGui.TableNextColumn();
 
                     // Color code based on roll value
-                    if (roll <= 100)
-                        ImGui.TextColored(new Vector4(1, 0.5f, 0.5f, 1), roll.ToString());
-                    else if (roll >= 900)
-                        ImGui.TextColored(new Vector4(0, 1, 0, 1), roll.ToString());
+                    if (rollValue <= 100)
+                        ImGui.TextColored(new Vector4(1, 0.5f, 0.5f, 1), rollValue.ToString());
+                    else if (rollValue >= 900)
+                        ImGui.TextColored(new Vector4(0, 1, 0, 1), rollValue.ToString());
                     else
-                        ImGui.Text(roll.ToString());
+                        ImGui.Text(rollValue.ToString());
                 }
 
                 ImGui.EndTable();
             }
 
-            // ✅ Winner & Stripper Summary
-            var sorted = rolls.OrderByDescending(kvp => kvp.Value).ToList();
+            // Winner & Stripper Summary
+            var winnerList = new List<KeyValuePair<string, int>>();
+            foreach (var item in gameRolls)
+            {
+                winnerList.Add(new KeyValuePair<string, int>(item.Key, item.Value));
+            }
+            winnerList.Sort((a, b) => b.Value.CompareTo(a.Value)); // Sort by value descending
 
             // Determine winner
             string winnerDisplay = "None";
-            if (sorted.Count > 0)
+            if (winnerList.Count > 0)
             {
-                foreach (var roll in sorted)
+                foreach (var candidate in winnerList)
                 {
-                    if (roll.Key != configuration.LastWinner)
+                    if (candidate.Key != configuration.LastWinner)
                     {
-                        winnerDisplay = $"{roll.Key} ({roll.Value})";
+                        winnerDisplay = $"{candidate.Key} ({candidate.Value})";
                         break;
                     }
                 }
 
                 if (winnerDisplay == "None")
                 {
-                    winnerDisplay = $"{sorted[0].Key} ({sorted[0].Value})"; // fallback
+                    winnerDisplay = $"{winnerList[0].Key} ({winnerList[0].Value})"; // fallback
                 }
             }
 
             // Determine strippers (roll <= 100)
-            var strippers = rolls.Where(kvp => kvp.Value <= 100).Select(kvp => kvp.Key).ToList();
-            string stripListDisplay = strippers.Count > 0 ? string.Join(", ", strippers) : "None";
+            var stripperList = new List<string>();
+            foreach (var rollData in gameRolls)
+            {
+                if (rollData.Value <= 100)
+                {
+                    stripperList.Add(rollData.Key);
+                }
+            }
+            string stripListDisplay = stripperList.Count > 0 ? string.Join(", ", stripperList) : "None";
 
             ImGui.Separator();
             ImGui.TextColored(new Vector4(1f, 0.85f, 0.2f, 1), $"Winner: {winnerDisplay} | Strippers: {stripListDisplay}");

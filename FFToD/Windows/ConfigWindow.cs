@@ -14,7 +14,7 @@ public class ConfigWindow : Window, IDisposable
     {
         this.configuration = configuration;
 
-        Size = new Vector2(400, 450);
+        Size = new Vector2(400, 250);
         SizeCondition = ImGuiCond.Always;
     }
 
@@ -27,58 +27,14 @@ public class ConfigWindow : Window, IDisposable
         // Game Settings
         if (ImGui.CollapsingHeader("Game Settings", ImGuiTreeNodeFlags.DefaultOpen))
         {
-            var minRolls = configuration.MinimumRolls;
-            if (ImGui.SliderInt("Minimum Rolls", ref minRolls, 1, 10))
-            {
-                configuration.MinimumRolls = minRolls;
-                configuration.Save();
-            }
-            if (ImGui.IsItemHovered())
-                ImGui.SetTooltip("Minimum number of rolls required to process results");
-
-            var waitTime = configuration.WaitTime;
-            if (ImGui.SliderInt("Wait Time (seconds)", ref waitTime, 1, 30))
-            {
-                configuration.WaitTime = waitTime;
-                configuration.Save();
-            }
-            if (ImGui.IsItemHovered())
-                ImGui.SetTooltip("Time to wait before auto-processing results");
-
             var rollTimeout = configuration.RollTimeout;
-            if (ImGui.SliderInt("Roll Timeout (seconds)", ref rollTimeout, 5, 60))
+            if (ImGui.SliderInt("Roll Timeout (seconds)", ref rollTimeout, 10, 30))
             {
                 configuration.RollTimeout = rollTimeout;
                 configuration.Save();
             }
             if (ImGui.IsItemHovered())
-                ImGui.SetTooltip("Time to wait for rolls before closing");
-
-            // Chat type dropdown
-            var currentChatType = (int)configuration.ChatType;
-            var chatTypes = Enum.GetNames(typeof(ChatType));
-            if (ImGui.Combo("Chat Type", ref currentChatType, chatTypes, chatTypes.Length))
-            {
-                configuration.ChatType = (ChatType)currentChatType;
-                configuration.Save();
-            }
-            if (ImGui.IsItemHovered())
-                ImGui.SetTooltip("Chat channel to use for announcements");
-        }
-
-        ImGui.Separator();
-
-        // Announcements
-        if (ImGui.CollapsingHeader("Announcements", ImGuiTreeNodeFlags.DefaultOpen))
-        {
-            var customAnnouncement = configuration.CustomAnnouncement ?? "";
-            if (ImGui.InputText("Custom Announcement", ref customAnnouncement, 200))
-            {
-                configuration.CustomAnnouncement = customAnnouncement;
-                configuration.Save();
-            }
-            if (ImGui.IsItemHovered())
-                ImGui.SetTooltip("Optional custom message to include in game start announcements");
+                ImGui.SetTooltip("Time to collect rolls before auto-processing results");
         }
 
         ImGui.Separator();
@@ -111,30 +67,6 @@ public class ConfigWindow : Window, IDisposable
             {
                 ImGui.TextDisabled("None");
             }
-        }
-
-        ImGui.Separator();
-
-        // Debug Settings
-        if (ImGui.CollapsingHeader("Debug Settings"))
-        {
-            var enableDebug = configuration.EnableDebugLogging;
-            if (ImGui.Checkbox("Enable Debug Logging", ref enableDebug))
-            {
-                configuration.EnableDebugLogging = enableDebug;
-                configuration.Save();
-            }
-            if (ImGui.IsItemHovered())
-                ImGui.SetTooltip("Enable verbose logging to the Dalamud log");
-
-            var logAllChat = configuration.LogAllChatTypes;
-            if (ImGui.Checkbox("Log All Chat Types", ref logAllChat))
-            {
-                configuration.LogAllChatTypes = logAllChat;
-                configuration.Save();
-            }
-            if (ImGui.IsItemHovered())
-                ImGui.SetTooltip("Log all chat messages with 'Random!' to help debug roll detection");
         }
 
         ImGui.Separator();

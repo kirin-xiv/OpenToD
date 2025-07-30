@@ -82,7 +82,7 @@ public sealed class Plugin : IDalamudPlugin
 
         commandManager.AddHandler(CommandStartName, new CommandInfo(OnStartCommand)
         {
-            HelpMessage = "Starts a Truth or Dare round"
+            HelpMessage = "Starts collecting rolls for Truth or Dare"
         });
 
         commandManager.AddHandler(CommandStopName, new CommandInfo(OnStopCommand)
@@ -129,7 +129,7 @@ public sealed class Plugin : IDalamudPlugin
 
     private void OnStartCommand(string command, string args)
     {
-        _ = StartGameAsync();
+        StartGame();
     }
 
     private void OnStopCommand(string command, string args)
@@ -153,18 +153,10 @@ public sealed class Plugin : IDalamudPlugin
     {
         var messageText = message.TextValue;
 
-        // Debug logging for all chat types containing "Random!"
-        if (configuration.LogAllChatTypes && messageText.Contains("Random!"))
-        {
-            pluginLog.Debug($"Chat message with 'Random!' - Type: {type} ({(int)type}), Message: {messageText}");
-        }
-
         if (!isGameActive || !isRollingPhase)
             return;
 
-        // Check if this is a roll message by pattern
-        // Random messages appear as "Random! <player> rolls a <number>." for others
-        // or "Random! You roll a <number>." for yourself
+        // Check if this is a roll message
         var rollMatch = Regex.Match(messageText, @"Random! (.+) rolls? a (\d+)\.");
         if (!rollMatch.Success)
             return;
@@ -184,7 +176,6 @@ public sealed class Plugin : IDalamudPlugin
             }
             else if (clientState.LocalPlayer != null)
             {
-                // Try to get the player name from client state
                 normalizedName = clientState.LocalPlayer.Name.TextValue;
             }
         }
@@ -193,24 +184,13 @@ public sealed class Plugin : IDalamudPlugin
         if (!currentRolls.ContainsKey(normalizedName))
         {
             currentRolls[normalizedName] = rollValue;
-
-            if (configuration.EnableDebugLogging)
-                pluginLog.Debug($"First roll recorded: {normalizedName} = {rollValue} (ChatType: {type} [{(int)type}])");
+            pluginLog.Debug($"Roll recorded: {normalizedName} = {rollValue}");
         }
-        else
-        {
-            if (configuration.EnableDebugLogging)
-                pluginLog.Debug($"Ignored duplicate roll from {normalizedName}");
-        }
-
-
-        if (configuration.EnableDebugLogging)
-            pluginLog.Debug($"Roll captured: {normalizedName} = {rollValue} (ChatType: {type} [{(int)type}])");
     }
 
     private string NormalizePlayerName(string name)
     {
-        // Remove world name if it's the last word or suffix
+        // Remove world name if present
         foreach (var server in serverNames)
         {
             if (name.EndsWith($" {server}", StringComparison.OrdinalIgnoreCase))
@@ -226,8 +206,7 @@ public sealed class Plugin : IDalamudPlugin
         return name;
     }
 
-
-    public async Task StartGameAsync()
+    public void StartGame()
     {
         if (isGameActive)
         {
@@ -237,64 +216,29 @@ public sealed class Plugin : IDalamudPlugin
 
         gameCancellation?.Cancel();
         gameCancellation = new CancellationTokenSource();
-        var token = gameCancellation.Token;
 
         isGameActive = true;
+        isRollingPhase = true;
         currentRolls.Clear();
 
-        try
+        chatGui.Print("[ToD] Game started! Collecting rolls...");
+
+        // Auto-close after timeout
+        _ = Task.Run(async () =>
         {
-            // Send announcement messages
-            await SendYellAsync("Truth or Dare: High roll (/random) chooses someone this round. You cannot win two rounds in a row.");
-            await Task.Delay(1000, token);
-
-            await SendYellAsync("Reminder: Keep T/D in Yell chat.");
-            await Task.Delay(1000, token);
-
-            await SendYellAsync("Max 3 rounds per dare. If you roll 100 or under, remove one item of clothing of your choice.");
-            await Task.Delay(1000, token);
-
-            if (!string.IsNullOrEmpty(configuration.CustomAnnouncement))
+            try
             {
-                await SendYellAsync(configuration.CustomAnnouncement);
-                await Task.Delay(1000, token);
+                await Task.Delay(configuration.RollTimeout * 1000, gameCancellation.Token);
+
+                // Close rolling phase and process results
+                isRollingPhase = false;
+                ProcessResults();
             }
-
-            await SendYellAsync("Rolls begin after a short countdown.");
-            await Task.Delay(2000, token);
-
-            // Countdown
-            await SendYellAsync("3...");
-            await Task.Delay(1000, token);
-            await SendYellAsync("2...");
-            await Task.Delay(1000, token);
-            await SendYellAsync("1...");
-            await Task.Delay(1000, token);
-            await SendYellAsync("Go!");
-
-            isRollingPhase = true;
-
-            // Wait for roll timeout
-            await Task.Delay(configuration.RollTimeout * 1000, token);
-
-            // Closing countdown
-            await SendYellAsync("Rolls closing in 3...2...1... Rolls are now closed.");
-            isRollingPhase = false;
-
-            await Task.Delay(1000, token);
-
-            // Process results
-            ProcessResults();
-        }
-        catch (OperationCanceledException)
-        {
-            chatGui.Print("[ToD] Game cancelled.");
-        }
-        finally
-        {
-            isGameActive = false;
-            isRollingPhase = false;
-        }
+            catch (OperationCanceledException)
+            {
+                // Game was cancelled
+            }
+        });
     }
 
     public void StopGame()
@@ -306,21 +250,25 @@ public sealed class Plugin : IDalamudPlugin
         }
 
         gameCancellation?.Cancel();
+        isGameActive = false;
+        isRollingPhase = false;
+
+        chatGui.Print("[ToD] Game stopped.");
     }
 
     private void ProcessResults()
     {
-        if (currentRolls.Count < configuration.MinimumRolls)
+        if (currentRolls.Count < 2) // Hardcoded minimum
         {
-            chatGui.PrintError($"[ToD] Not enough rolls received ({currentRolls.Count}/{configuration.MinimumRolls}). Game cancelled.");
+            chatGui.PrintError($"[ToD] Not enough rolls received ({currentRolls.Count}/2). Game cancelled.");
+            isGameActive = false;
             return;
         }
 
-        // Find winner
+        // Find winner (skip last winner if possible)
         var sortedRolls = currentRolls.OrderByDescending(kvp => kvp.Value).ToList();
         string winner = "";
         int winnerRoll = 0;
-        bool forcedRepeatWinner = false;
 
         foreach (var roll in sortedRolls)
         {
@@ -337,39 +285,22 @@ public sealed class Plugin : IDalamudPlugin
         {
             winner = sortedRolls[0].Key;
             winnerRoll = sortedRolls[0].Value;
-            forcedRepeatWinner = true;
         }
 
-        // Find strip list
+        // Find strippers (100 or under)
         var stripList = currentRolls.Where(kvp => kvp.Value <= 100).Select(kvp => kvp.Key).ToList();
-
-        // Format messages
         var stripMessage = stripList.Count > 0 ? string.Join(", ", stripList) : "None";
-        var resultMessage = $"[T/D] {winner} wins ({winnerRoll}) | Strip: {stripMessage} | Keep T/D in /yell! Dares can be 3 rounds max.";
 
-        _ = SendYellAsync(resultMessage);
-
-        // 🔽 Print summary locally for manual copy/paste
+        // Print copy/paste result
         var summaryMessage = $"/yell Winner: {winner} ({winnerRoll}) | Strippers: {stripMessage}";
-        chatGui.Print(summaryMessage);
+        chatGui.Print($"[ToD] {summaryMessage}");
 
-        // ✅ Update last winner only if not forced repeat
-        if (!forcedRepeatWinner)
-        {
-            configuration.LastWinner = winner;
-            configuration.Save();
-        }
+        // Update last winner
+        configuration.LastWinner = winner;
+        configuration.Save();
 
-        if (configuration.EnableDebugLogging)
-            pluginLog.Debug($"Game complete. Winner: {winner} ({winnerRoll}). Strip list: {stripMessage}");
-    }
-
-
-    private async Task SendYellAsync(string message)
-    {
-        var command = $"/{configuration.ChatType.ToString().ToLower()} {message}";
-        commandManager.ProcessCommand(command);
-        await Task.Yield();
+        isGameActive = false;
+        pluginLog.Debug($"Game complete. Winner: {winner} ({winnerRoll}). Strip list: {stripMessage}");
     }
 
     public void ClearLastWinner()
