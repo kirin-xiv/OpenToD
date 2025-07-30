@@ -293,7 +293,7 @@ public sealed class Plugin : IDalamudPlugin
 
         // Print copy/paste result
         var summaryMessage = $"/yell Winner: {winner} ({winnerRoll}) | Strippers: {stripMessage}";
-        chatGui.Print($"[ToD] {summaryMessage}");
+        chatGui.Print($"{summaryMessage}");
 
         // Update last winner
         configuration.LastWinner = winner;
