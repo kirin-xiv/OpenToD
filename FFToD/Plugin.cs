@@ -37,6 +37,9 @@ public sealed class Plugin : IDalamudPlugin
     private readonly Dictionary<string, int> currentRolls = new();
     private CancellationTokenSource? gameCancellation;
 
+    // Store the current round winner separately from the "last winner" used for exclusion
+    private string currentRoundWinner = "";
+
     // Server list for name normalization
     private readonly HashSet<string> serverNames = new()
     {
@@ -214,12 +217,20 @@ public sealed class Plugin : IDalamudPlugin
             return;
         }
 
+        // Update last winner from previous round at the START of new round
+        if (!string.IsNullOrEmpty(currentRoundWinner))
+        {
+            configuration.LastWinner = currentRoundWinner;
+            configuration.Save();
+        }
+
         gameCancellation?.Cancel();
         gameCancellation = new CancellationTokenSource();
 
         isGameActive = true;
         isRollingPhase = true;
         currentRolls.Clear();
+        currentRoundWinner = ""; // Clear current round winner
 
         chatGui.Print("[ToD] Game started! Collecting rolls...");
 
@@ -252,6 +263,7 @@ public sealed class Plugin : IDalamudPlugin
         gameCancellation?.Cancel();
         isGameActive = false;
         isRollingPhase = false;
+        currentRoundWinner = ""; // Clear current round winner when stopped
 
         chatGui.Print("[ToD] Game stopped.");
     }
@@ -262,6 +274,7 @@ public sealed class Plugin : IDalamudPlugin
         {
             chatGui.PrintError($"[ToD] Not enough rolls received ({currentRolls.Count}/2). Game cancelled.");
             isGameActive = false;
+            currentRoundWinner = "";
             return;
         }
 
@@ -287,6 +300,9 @@ public sealed class Plugin : IDalamudPlugin
             winnerRoll = sortedRolls[0].Value;
         }
 
+        // Store current round winner (but don't update LastWinner yet)
+        currentRoundWinner = winner;
+
         // Find strippers (100 or under)
         var stripList = currentRolls.Where(kvp => kvp.Value <= 100).Select(kvp => kvp.Key).ToList();
         var stripMessage = stripList.Count > 0 ? string.Join(", ", stripList) : "None";
@@ -294,10 +310,6 @@ public sealed class Plugin : IDalamudPlugin
         // Print copy/paste result
         var summaryMessage = $"/yell Winner: {winner} ({winnerRoll}) | Strippers: {stripMessage}";
         chatGui.Print($"{summaryMessage}");
-
-        // Update last winner
-        configuration.LastWinner = winner;
-        configuration.Save();
 
         isGameActive = false;
         pluginLog.Debug($"Game complete. Winner: {winner} ({winnerRoll}). Strip list: {stripMessage}");
@@ -312,6 +324,7 @@ public sealed class Plugin : IDalamudPlugin
     public IReadOnlyDictionary<string, int> GetCurrentRolls() => currentRolls;
     public bool IsGameActive => isGameActive;
     public bool IsRollingPhase => isRollingPhase;
+    public string GetCurrentRoundWinner() => currentRoundWinner; // New method to get current winner
 
     public void OpenConfigWindow()
     {

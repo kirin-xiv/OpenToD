@@ -134,29 +134,44 @@ public class MainWindow : Window, IDisposable
             }
 
             // Winner & Stripper Summary
-            var winnerList = new List<KeyValuePair<string, int>>();
-            foreach (var item in gameRolls)
-            {
-                winnerList.Add(new KeyValuePair<string, int>(item.Key, item.Value));
-            }
-            winnerList.Sort((a, b) => b.Value.CompareTo(a.Value)); // Sort by value descending
-
-            // Determine winner
             string winnerDisplay = "None";
-            if (winnerList.Count > 0)
+
+            // If the round is complete, show the actual winner
+            var currentRoundWinner = plugin.GetCurrentRoundWinner();
+            if (!string.IsNullOrEmpty(currentRoundWinner))
             {
+                // Find the roll value for the current winner
+                if (gameRolls.TryGetValue(currentRoundWinner, out int winnerRoll))
+                {
+                    winnerDisplay = $"{currentRoundWinner} ({winnerRoll})";
+                }
+                else
+                {
+                    winnerDisplay = currentRoundWinner;
+                }
+            }
+            else if (plugin.IsRollingPhase && gameRolls.Count > 0)
+            {
+                // During rolling phase, show tentative winner (applying last winner exclusion)
+                var winnerList = new List<KeyValuePair<string, int>>();
+                foreach (var item in gameRolls)
+                {
+                    winnerList.Add(new KeyValuePair<string, int>(item.Key, item.Value));
+                }
+                winnerList.Sort((a, b) => b.Value.CompareTo(a.Value)); // Sort by value descending
+
                 foreach (var candidate in winnerList)
                 {
                     if (candidate.Key != configuration.LastWinner)
                     {
-                        winnerDisplay = $"{candidate.Key} ({candidate.Value})";
+                        winnerDisplay = $"{candidate.Key} ({candidate.Value}) [Tentative]";
                         break;
                     }
                 }
 
-                if (winnerDisplay == "None")
+                if (winnerDisplay == "None" && winnerList.Count > 0)
                 {
-                    winnerDisplay = $"{winnerList[0].Key} ({winnerList[0].Value})"; // fallback
+                    winnerDisplay = $"{winnerList[0].Key} ({winnerList[0].Value}) [Tentative]"; // fallback
                 }
             }
 
