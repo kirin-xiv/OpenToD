@@ -133,8 +133,10 @@ public class MainWindow : Window, IDisposable
                 ImGui.EndTable();
             }
 
-            // Winner & Stripper Summary
+            // Generate winner and stripper info for display and copying
             string winnerDisplay = "None";
+            string winnerForCopy = "";
+            int winnerRollForCopy = 0;
 
             // If the round is complete, show the actual winner
             var currentRoundWinner = plugin.GetCurrentRoundWinner();
@@ -144,10 +146,13 @@ public class MainWindow : Window, IDisposable
                 if (gameRolls.TryGetValue(currentRoundWinner, out int winnerRoll))
                 {
                     winnerDisplay = $"{currentRoundWinner} ({winnerRoll})";
+                    winnerForCopy = currentRoundWinner;
+                    winnerRollForCopy = winnerRoll;
                 }
                 else
                 {
                     winnerDisplay = currentRoundWinner;
+                    winnerForCopy = currentRoundWinner;
                 }
             }
             else if (plugin.IsRollingPhase && gameRolls.Count > 0)
@@ -165,6 +170,8 @@ public class MainWindow : Window, IDisposable
                     if (candidate.Key != configuration.LastWinner)
                     {
                         winnerDisplay = $"{candidate.Key} ({candidate.Value}) [Tentative]";
+                        winnerForCopy = candidate.Key;
+                        winnerRollForCopy = candidate.Value;
                         break;
                     }
                 }
@@ -172,6 +179,8 @@ public class MainWindow : Window, IDisposable
                 if (winnerDisplay == "None" && winnerList.Count > 0)
                 {
                     winnerDisplay = $"{winnerList[0].Key} ({winnerList[0].Value}) [Tentative]"; // fallback
+                    winnerForCopy = winnerList[0].Key;
+                    winnerRollForCopy = winnerList[0].Value;
                 }
             }
 
@@ -188,6 +197,20 @@ public class MainWindow : Window, IDisposable
 
             ImGui.Separator();
             ImGui.TextColored(new Vector4(1f, 0.85f, 0.2f, 1), $"Winner: {winnerDisplay} | Strippers: {stripListDisplay}");
+
+            // Add copy button when we have a winner (completed or tentative)
+            if (!string.IsNullOrEmpty(winnerForCopy))
+            {
+                ImGui.Spacing();
+                if (ImGui.Button("Copy Results", new Vector2(120, 25)))
+                {
+                    // Generate the copy text using the same format as the chat output
+                    var copyText = $"/yell Winner: {winnerForCopy} ({winnerRollForCopy}) | Strippers: {stripListDisplay}";
+                    ImGui.SetClipboardText(copyText);
+                }
+                if (ImGui.IsItemHovered())
+                    ImGui.SetTooltip("Copy the results to clipboard for pasting in chat");
+            }
         }
         else
         {
