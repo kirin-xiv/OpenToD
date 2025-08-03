@@ -321,6 +321,71 @@ public sealed class Plugin : IDalamudPlugin
         configuration.Save();
     }
 
+    public void PassToNextWinner()
+    {
+        if (string.IsNullOrEmpty(currentRoundWinner) || currentRolls.Count < 2)
+            return;
+
+        // Find next eligible winner (exclude current winner and last winner)
+        var sortedRolls = currentRolls.OrderByDescending(kvp => kvp.Value).ToList();
+        string newWinner = "";
+        int newWinnerRoll = 0;
+
+        foreach (var roll in sortedRolls)
+        {
+            if (roll.Key != currentRoundWinner && roll.Key != configuration.LastWinner)
+            {
+                newWinner = roll.Key;
+                newWinnerRoll = roll.Value;
+                break;
+            }
+        }
+
+        // Fallback: if no one else available, just exclude current winner
+        if (string.IsNullOrEmpty(newWinner))
+        {
+            foreach (var roll in sortedRolls)
+            {
+                if (roll.Key != currentRoundWinner)
+                {
+                    newWinner = roll.Key;
+                    newWinnerRoll = roll.Value;
+                    break;
+                }
+            }
+        }
+
+        if (!string.IsNullOrEmpty(newWinner))
+        {
+            // Update last winner to the previous winner (for next round exclusion)
+            configuration.LastWinner = currentRoundWinner;
+            configuration.Save();
+
+            // Update current round winner
+            currentRoundWinner = newWinner;
+
+            // Find strippers for new announcement
+            var stripList = currentRolls.Where(kvp => kvp.Value <= 100).Select(kvp => kvp.Key).ToList();
+            var stripMessage = stripList.Count > 0 ? string.Join(", ", stripList) : "None";
+
+            // Announce new winner
+            var summaryMessage = $"/yell Winner: {newWinner} ({newWinnerRoll}) | Strippers: {stripMessage}";
+            chatGui.Print($"{summaryMessage}");
+            
+            pluginLog.Debug($"Passed to next winner: {newWinner} ({newWinnerRoll})");
+        }
+    }
+
+    public bool CanPass()
+    {
+        if (string.IsNullOrEmpty(currentRoundWinner) || isGameActive || currentRolls.Count < 2)
+            return false;
+
+        // Check if there's at least one other player besides current winner
+        var eligibleCount = currentRolls.Count(kvp => kvp.Key != currentRoundWinner);
+        return eligibleCount > 0;
+    }
+
     public IReadOnlyDictionary<string, int> GetCurrentRolls() => currentRolls;
     public bool IsGameActive => isGameActive;
     public bool IsRollingPhase => isRollingPhase;

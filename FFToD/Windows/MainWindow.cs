@@ -89,6 +89,18 @@ public class MainWindow : Window, IDisposable
             plugin.OpenConfigWindow();
         }
 
+        // Pass button - only show when game is complete and passing is possible
+        if (plugin.CanPass())
+        {
+            ImGui.Spacing();
+            if (ImGui.Button("Pass to Next Winner", new Vector2(180, 30)))
+            {
+                plugin.PassToNextWinner();
+            }
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Pass the win to the next highest roller");
+        }
+
         ImGui.Separator();
 
         // Rolls table
