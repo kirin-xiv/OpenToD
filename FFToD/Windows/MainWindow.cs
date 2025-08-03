@@ -53,6 +53,12 @@ public class MainWindow : Window, IDisposable
         else
             ImGui.TextDisabled("Last winner: None");
 
+        // Debug mode indicator
+        if (configuration.DebugMode)
+        {
+            ImGui.TextColored(new Vector4(1, 0.5f, 0, 1), "DEBUG MODE: Use /random 2");
+        }
+
         ImGui.Unindent();
         ImGui.Separator();
 
@@ -89,16 +95,22 @@ public class MainWindow : Window, IDisposable
             plugin.OpenConfigWindow();
         }
 
-        // Pass button - only show when game is complete and passing is possible
-        if (plugin.CanPass())
+        ImGui.SameLine();
+
+        // Pass button - always visible but disabled when not possible
+        bool canPass = plugin.CanPass();
+        if (!canPass) ImGui.BeginDisabled();
+        if (ImGui.Button("Pass to Next Winner", new Vector2(150, 30)))
         {
-            ImGui.Spacing();
-            if (ImGui.Button("Pass to Next Winner", new Vector2(180, 30)))
-            {
-                plugin.PassToNextWinner();
-            }
-            if (ImGui.IsItemHovered())
+            plugin.PassToNextWinner();
+        }
+        if (!canPass) ImGui.EndDisabled();
+        if (ImGui.IsItemHovered())
+        {
+            if (canPass)
                 ImGui.SetTooltip("Pass the win to the next highest roller");
+            else
+                ImGui.SetTooltip("Pass the win to the next highest roller (available after game ends)");
         }
 
         ImGui.Separator();

@@ -14,7 +14,7 @@ public class ConfigWindow : Window, IDisposable
     {
         this.configuration = configuration;
 
-        Size = new Vector2(400, 250);
+        Size = new Vector2(400, 320);
         SizeCondition = ImGuiCond.Always;
     }
 
@@ -66,6 +66,30 @@ public class ConfigWindow : Window, IDisposable
             else
             {
                 ImGui.TextDisabled("None");
+            }
+        }
+
+        ImGui.Separator();
+
+        // Debug Settings
+        if (ImGui.CollapsingHeader("Debug Settings"))
+        {
+            var debugMode = configuration.DebugMode;
+            if (ImGui.Checkbox("Enable Debug Mode", ref debugMode))
+            {
+                configuration.DebugMode = debugMode;
+                configuration.Save();
+            }
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Enables detection of /random <number> rolls for easier tiebreaker testing.\nExample: 'Random! You roll a 2 (out of 2).' instead of 'Random! You roll a 123.'");
+
+            if (configuration.DebugMode)
+            {
+                ImGui.Indent();
+                ImGui.TextColored(new Vector4(1, 1, 0, 1), "Debug mode active!");
+                ImGui.Text("Use '/random 2' to test tiebreakers easily.");
+                ImGui.Text("Pattern: 'Random! Player roll a X (out of Y).'");
+                ImGui.Unindent();
             }
         }
 

@@ -35,6 +35,8 @@ public sealed class Plugin : IDalamudPlugin
     private bool isGameActive = false;
     private bool isRollingPhase = false;
     private readonly Dictionary<string, int> currentRolls = new();
+    private readonly Dictionary<string, int> rollOrder = new(); // Track order of rolls for tiebreaking
+    private int rollCounter = 0; // Counter for roll ordering
     private CancellationTokenSource? gameCancellation;
 
     // Store the current round winner separately from the "last winner" used for exclusion
@@ -159,13 +161,27 @@ public sealed class Plugin : IDalamudPlugin
         if (!isGameActive || !isRollingPhase)
             return;
 
-        // Check if this is a roll message
-        var rollMatch = Regex.Match(messageText, @"Random! (.+) rolls? a (\d+)\.");
+        // Check if this is a roll message - support both normal and debug patterns
+        Match rollMatch;
+        string playerName;
+        int rollValue;
+
+        if (configuration.DebugMode)
+        {
+            // Debug pattern: "Random! PlayerName roll a 2 (out of 2)." or "Random! You roll a 1 (out of 2)."
+            rollMatch = Regex.Match(messageText, @"Random! (.+) rolls? a (\d+) \(out of \d+\)\.");
+        }
+        else
+        {
+            // Normal pattern: "Random! PlayerName rolls a 123."
+            rollMatch = Regex.Match(messageText, @"Random! (.+) rolls? a (\d+)\.");
+        }
+
         if (!rollMatch.Success)
             return;
 
-        var playerName = rollMatch.Groups[1].Value;
-        var rollValue = int.Parse(rollMatch.Groups[2].Value);
+        playerName = rollMatch.Groups[1].Value;
+        rollValue = int.Parse(rollMatch.Groups[2].Value);
 
         // Normalize player name
         var normalizedName = NormalizePlayerName(playerName);
@@ -187,7 +203,8 @@ public sealed class Plugin : IDalamudPlugin
         if (!currentRolls.ContainsKey(normalizedName))
         {
             currentRolls[normalizedName] = rollValue;
-            pluginLog.Debug($"Roll recorded: {normalizedName} = {rollValue}");
+            rollOrder[normalizedName] = rollCounter++; // Track roll order for tiebreaking
+            pluginLog.Debug($"Roll recorded: {normalizedName} = {rollValue} (order: {rollOrder[normalizedName]})");
         }
     }
 
@@ -207,6 +224,70 @@ public sealed class Plugin : IDalamudPlugin
         }
 
         return name;
+    }
+
+    private string ResolveTiebreaker(List<KeyValuePair<string, int>> tiedPlayers)
+    {
+        // Among tied players, return the one who rolled first (lowest roll order)
+        var firstRoller = tiedPlayers.OrderBy(player => rollOrder.TryGetValue(player.Key, out int order) ? order : int.MaxValue).First();
+        pluginLog.Debug($"Tiebreaker resolved: {tiedPlayers.Count} players tied at {firstRoller.Value}, winner: {firstRoller.Key} (rolled first)");
+        return firstRoller.Key;
+    }
+
+    private string FindWinnerWithTiebreaker(List<KeyValuePair<string, int>> sortedRolls, string excludePlayer = "")
+    {
+        if (sortedRolls == null || sortedRolls.Count == 0)
+            return "";
+            
+        // Group players by roll value (highest first due to sorting)
+        var rollGroups = sortedRolls.GroupBy(kvp => kvp.Value).OrderByDescending(g => g.Key);
+        
+        foreach (var group in rollGroups)
+        {
+            var eligiblePlayers = group.Where(player => !string.IsNullOrEmpty(player.Key) && player.Key != excludePlayer).ToList();
+            if (eligiblePlayers.Count == 0) continue;
+            
+            if (eligiblePlayers.Count == 1)
+            {
+                // Single player at this roll value, they win
+                return eligiblePlayers[0].Key;
+            }
+            else
+            {
+                // Multiple players tied at this roll value, use tiebreaker
+                return ResolveTiebreaker(eligiblePlayers);
+            }
+        }
+        
+        return ""; // No eligible winner found
+    }
+
+    private string FindWinnerWithTiebreaker(List<KeyValuePair<string, int>> sortedRolls, string excludePlayer1, string excludePlayer2)
+    {
+        if (sortedRolls == null || sortedRolls.Count == 0)
+            return "";
+            
+        // Group players by roll value (highest first due to sorting)
+        var rollGroups = sortedRolls.GroupBy(kvp => kvp.Value).OrderByDescending(g => g.Key);
+        
+        foreach (var group in rollGroups)
+        {
+            var eligiblePlayers = group.Where(player => !string.IsNullOrEmpty(player.Key) && player.Key != excludePlayer1 && player.Key != excludePlayer2).ToList();
+            if (eligiblePlayers.Count == 0) continue;
+            
+            if (eligiblePlayers.Count == 1)
+            {
+                // Single player at this roll value, they win
+                return eligiblePlayers[0].Key;
+            }
+            else
+            {
+                // Multiple players tied at this roll value, use tiebreaker
+                return ResolveTiebreaker(eligiblePlayers);
+            }
+        }
+        
+        return ""; // No eligible winner found
     }
 
     public void StartGame()
@@ -230,6 +311,8 @@ public sealed class Plugin : IDalamudPlugin
         isGameActive = true;
         isRollingPhase = true;
         currentRolls.Clear();
+        rollOrder.Clear(); // Clear roll order tracking
+        rollCounter = 0; // Reset roll counter
         currentRoundWinner = ""; // Clear current round winner
 
         chatGui.Print("[ToD] Game started! Collecting rolls...");
@@ -278,27 +361,19 @@ public sealed class Plugin : IDalamudPlugin
             return;
         }
 
-        // Find winner (skip last winner if possible)
+        // Find winner using tiebreaker logic (skip last winner if possible)
         var sortedRolls = currentRolls.OrderByDescending(kvp => kvp.Value).ToList();
-        string winner = "";
-        int winnerRoll = 0;
-
-        foreach (var roll in sortedRolls)
-        {
-            if (roll.Key != configuration.LastWinner)
-            {
-                winner = roll.Key;
-                winnerRoll = roll.Value;
-                break;
-            }
-        }
-
-        // Fallback if only last winner rolled
+        
+        // Try to find winner excluding last winner
+        string winner = FindWinnerWithTiebreaker(sortedRolls, configuration.LastWinner);
+        
+        // Fallback if only last winner is eligible
         if (string.IsNullOrEmpty(winner) && sortedRolls.Count > 0)
         {
-            winner = sortedRolls[0].Key;
-            winnerRoll = sortedRolls[0].Value;
+            winner = FindWinnerWithTiebreaker(sortedRolls);
         }
+        
+        int winnerRoll = currentRolls.TryGetValue(winner, out int roll) ? roll : 0;
 
         // Store current round winner (but don't update LastWinner yet)
         currentRoundWinner = winner;
@@ -326,34 +401,19 @@ public sealed class Plugin : IDalamudPlugin
         if (string.IsNullOrEmpty(currentRoundWinner) || currentRolls.Count < 2)
             return;
 
-        // Find next eligible winner (exclude current winner and last winner)
+        // Find next eligible winner using tiebreaker logic (exclude current winner and last winner)
         var sortedRolls = currentRolls.OrderByDescending(kvp => kvp.Value).ToList();
-        string newWinner = "";
-        int newWinnerRoll = 0;
-
-        foreach (var roll in sortedRolls)
-        {
-            if (roll.Key != currentRoundWinner && roll.Key != configuration.LastWinner)
-            {
-                newWinner = roll.Key;
-                newWinnerRoll = roll.Value;
-                break;
-            }
-        }
-
+        
+        // Try to find winner excluding both current winner and last winner
+        string newWinner = FindWinnerWithTiebreaker(sortedRolls, currentRoundWinner, configuration.LastWinner);
+        
         // Fallback: if no one else available, just exclude current winner
         if (string.IsNullOrEmpty(newWinner))
         {
-            foreach (var roll in sortedRolls)
-            {
-                if (roll.Key != currentRoundWinner)
-                {
-                    newWinner = roll.Key;
-                    newWinnerRoll = roll.Value;
-                    break;
-                }
-            }
+            newWinner = FindWinnerWithTiebreaker(sortedRolls, currentRoundWinner);
         }
+        
+        int newWinnerRoll = currentRolls.TryGetValue(newWinner, out int roll) ? roll : 0;
 
         if (!string.IsNullOrEmpty(newWinner))
         {

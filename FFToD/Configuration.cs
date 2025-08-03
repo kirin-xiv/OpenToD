@@ -13,6 +13,9 @@ public class Configuration : IPluginConfiguration
     public int RollTimeout { get; set; } = 17; // Matches your macro timing
     public string LocalPlayerName { get; set; } = "";
     public string LastWinner { get; set; } = "";
+    
+    // Debug settings
+    public bool DebugMode { get; set; } = false; // Enable debug roll pattern for testing
 
     [NonSerialized]
     private IDalamudPluginInterface? pluginInterface;
