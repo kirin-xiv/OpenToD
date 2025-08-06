@@ -1,12 +1,12 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<Project Sdk="Dalamud.NET.Sdk/12.0.0">
+<Project Sdk="Dalamud.NET.Sdk/13.0.0">
     <PropertyGroup>
         <AssemblyName>FFToD</AssemblyName>
         <!-- Single source of truth for version - change ONLY this line to update everywhere -->
-        <Version>1.4.0.0</Version>
+        <Version>1.5.0.0</Version>
         <AssemblyVersion>$(Version)</AssemblyVersion>
         <FileVersion>$(Version)</FileVersion>
-        <Authors>Kirin</Authors>
+        <Authors>Kirin Avenleigh</Authors>
         <Company></Company>
         <Description>Truth or Dare mini-game automation plugin for FFXIV</Description>
         <Copyright></Copyright>

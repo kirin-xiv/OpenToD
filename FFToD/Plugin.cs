@@ -410,11 +410,11 @@ public sealed class Plugin : IDalamudPlugin
         // Fallback: if no one else available, just exclude current winner
         if (string.IsNullOrEmpty(newWinner))
         {
-            newWinner = FindWinnerWithTiebreaker(sortedRolls, currentRoundWinner);
+            newWinner = FindWinnerWithTiebreaker(sortedRolls, configuration.LastWinner);
         }
         
         int newWinnerRoll = currentRolls.TryGetValue(newWinner, out int roll) ? roll : 0;
-
+        
         if (!string.IsNullOrEmpty(newWinner))
         {
             // Update last winner to the previous winner (for next round exclusion)
