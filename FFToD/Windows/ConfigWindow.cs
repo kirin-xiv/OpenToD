@@ -1,7 +1,7 @@
 using Dalamud.Interface.Windowing;
+using Dalamud.Bindings.ImGui;
 using System;
 using System.Numerics;
-using Dalamud.Bindings.ImGui;
 
 namespace FFToD;
 

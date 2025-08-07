@@ -7,19 +7,12 @@
         <AssemblyVersion>$(Version)</AssemblyVersion>
         <FileVersion>$(Version)</FileVersion>
         <Authors>Kirin Avenleigh</Authors>
-        <Company></Company>
         <Description>Truth or Dare mini-game automation plugin for FFXIV</Description>
-        <Copyright></Copyright>
         <PackageProjectUrl>https://github.com/kirin-xiv/FFToD-Release</PackageProjectUrl>
         <PackageLicenseExpression>MIT</PackageLicenseExpression>
         <IsPackable>false</IsPackable>
-        <DalamudApiLevel>12</DalamudApiLevel>
+        <DalamudApiLevel>13</DalamudApiLevel>
         <TargetFramework>net9.0-windows</TargetFramework>
-    </PropertyGroup>
-    <PropertyGroup>
-        <DalamudLibPath>$(appdata)\XIVLauncher\addon\Hooks\dev\</DalamudLibPath>
-        <DalamudPluginPath>$(appdata)\XIVLauncher\installedPlugins\TruthOrDarePlugin\</DalamudPluginPath>
-        <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     </PropertyGroup>
 
     <!-- Auto-update JSON files with current version before build -->
