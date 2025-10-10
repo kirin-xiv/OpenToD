@@ -41,7 +41,7 @@ Create this macro in-game and add `/todstart` where indicated:
 /sh Keep T/D in /yell. <wait.2>
 /sh Max 3 rounds per dare. If you roll 100 or under, remove one item of clothing of your choice. <wait.2>
 /sh High numbers cannot win twice in a row. If a repeat occurs, we move to second highest. <wait.2>
-/sh Wi-Fi: MSS-8Y5FR8MZSQD8 || SplashBathhouse <wait.2>
+/sh Wi-Fi: https://discord.gg/ndb6BH5B <wait.2>
 /sh --- Rolls begin on 'Go!' after a short countdown --- <wait.2>
 /sh 3... <wait.2>
 /sh 2... <wait.2>
