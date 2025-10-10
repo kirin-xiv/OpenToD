@@ -13,6 +13,26 @@
         "requested": "[1.2.25, )",
         "resolved": "1.2.25",
         "contentHash": "xCXiw7BCxHJ8pF6wPepRUddlh2dlQlbr81gXA72hdk4FLHkKXas7EH/n+fk5UCA/YfMqG1Z6XaPiUjDbUNBUzg=="
+      },
+      "ECommons": {
+        "type": "Direct",
+        "requested": "[*, )",
+        "resolved": "3.0.1.17",
+        "contentHash": "kveqxdys4A7tt8EkzQmN4XPXe9Rz/k+c/+6U2yyk5hWAeBynTFo0dGkWeFfp2I+mnfUviJrvhEAee+t+jhFVPg=="
+      },
+      "Hexa.NET.ImGui": {
+        "type": "Direct",
+        "requested": "[2.1.4, )",
+        "resolved": "2.1.4",
+        "contentHash": "EpamPNEWEfKEOj5iOmwRBuW4xen24ZSECWgSYkRkKjfvnFbea5r0idR9peYGXpicFVduPRyG1rV8JM9rX5fdpA==",
+        "dependencies": {
+          "HexaGen.Runtime": "1.1.9"
+        }
+      },
+      "HexaGen.Runtime": {
+        "type": "Transitive",
+        "resolved": "1.1.9",
+        "contentHash": "C35/kzqMUlgHOlwld5w7TzoEedMwrOvzK0oCks4D3ZZf24WKV4f0hTU5pbXJyAKpdcW1ib0BAp4wmEXemGMCaw=="
       }
     }
   }

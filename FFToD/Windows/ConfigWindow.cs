@@ -1,6 +1,7 @@
 using Dalamud.Interface.Windowing;
 using Dalamud.Bindings.ImGui;
 using System;
+using System.Linq;
 using System.Numerics;
 
 namespace FFToD;
@@ -14,7 +15,7 @@ public class ConfigWindow : Window, IDisposable
     {
         this.configuration = configuration;
 
-        Size = new Vector2(400, 320);
+        Size = new Vector2(600, 750);
         SizeCondition = ImGuiCond.Always;
     }
 
@@ -35,6 +36,15 @@ public class ConfigWindow : Window, IDisposable
             }
             if (ImGui.IsItemHovered())
                 ImGui.SetTooltip("Time to collect rolls before auto-processing results");
+                
+            var numWinners = configuration.NumberOfWinners;
+            if (ImGui.SliderInt("Number of Winners", ref numWinners, 1, 3))
+            {
+                configuration.NumberOfWinners = numWinners;
+                configuration.Save();
+            }
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("How many winners to select each round (1-3)");
         }
 
         ImGui.Separator();
@@ -51,10 +61,22 @@ public class ConfigWindow : Window, IDisposable
             if (ImGui.IsItemHovered())
                 ImGui.SetTooltip("Your character name (used to replace 'You' in roll messages)");
 
-            ImGui.Text("Last Winner:");
+            ImGui.Text("Last Winners:");
             ImGui.SameLine();
-            if (!string.IsNullOrEmpty(configuration.LastWinner))
+            if (configuration.LastWinners != null && configuration.LastWinners.Count > 0)
             {
+                ImGui.TextColored(new Vector4(0, 1, 0, 1), string.Join(", ", configuration.LastWinners));
+                ImGui.SameLine();
+                if (ImGui.SmallButton("Clear"))
+                {
+                    configuration.LastWinner = "";
+                    configuration.LastWinners.Clear();
+                    configuration.Save();
+                }
+            }
+            else if (!string.IsNullOrEmpty(configuration.LastWinner))
+            {
+                // Fallback for backwards compatibility
                 ImGui.TextColored(new Vector4(0, 1, 0, 1), configuration.LastWinner);
                 ImGui.SameLine();
                 if (ImGui.SmallButton("Clear"))
@@ -66,6 +88,250 @@ public class ConfigWindow : Window, IDisposable
             else
             {
                 ImGui.TextDisabled("None");
+            }
+        }
+
+        ImGui.Separator();
+
+        // Automation Settings
+        if (ImGui.CollapsingHeader("Automation Settings", ImGuiTreeNodeFlags.DefaultOpen))
+        {
+            var autoPostRules = configuration.AutoPostRules;
+            if (ImGui.Checkbox("Auto-post rules when starting game", ref autoPostRules))
+            {
+                configuration.AutoPostRules = autoPostRules;
+                configuration.Save();
+            }
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Automatically posts rules, countdown, and starts roll collection");
+
+            var autoPostResults = configuration.AutoPostResults;
+            if (ImGui.Checkbox("Auto-post results when rolls close", ref autoPostResults))
+            {
+                configuration.AutoPostResults = autoPostResults;
+                configuration.Save();
+            }
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Automatically posts closing countdown and results to chat");
+
+            var customWiFiMessage = configuration.CustomWiFiMessage ?? "";
+            if (ImGui.InputText("Custom Wi-Fi/Discord Message", ref customWiFiMessage, 200))
+            {
+                configuration.CustomWiFiMessage = customWiFiMessage;
+                configuration.Save();
+            }
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Customize the Wi-Fi/Discord line posted with rules\nExample: 'Discord: https://discord.gg/yourserver' or 'Linkshell: YourLS'");
+        }
+
+        ImGui.Separator();
+
+        // Chat Channel Settings
+        if (ImGui.CollapsingHeader("Chat Channel Settings", ImGuiTreeNodeFlags.DefaultOpen))
+        {
+            ImGui.TextColored(new Vector4(0.7f, 0.7f, 1.0f, 1.0f), "Configure which chat channels to use for different messages:");
+            ImGui.Spacing();
+
+            // Rules Channel
+            var rulesChannel = configuration.ChatChannels.RulesChannel;
+            if (ImGui.BeginCombo("Rules Channel", rulesChannel.ToString()))
+            {
+                foreach (var channel in Enum.GetValues<ChatChannelType>())
+                {
+                    bool isSelected = rulesChannel == channel;
+                    if (ImGui.Selectable(channel.ToString(), isSelected))
+                    {
+                        configuration.ChatChannels.RulesChannel = channel;
+                        configuration.Save();
+                    }
+                    if (isSelected)
+                        ImGui.SetItemDefaultFocus();
+                }
+                ImGui.EndCombo();
+            }
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Channel for posting game rules and instructions");
+
+            // Results Channel
+            var resultsChannel = configuration.ChatChannels.ResultsChannel;
+            if (ImGui.BeginCombo("Results Channel", resultsChannel.ToString()))
+            {
+                foreach (var channel in Enum.GetValues<ChatChannelType>())
+                {
+                    bool isSelected = resultsChannel == channel;
+                    if (ImGui.Selectable(channel.ToString(), isSelected))
+                    {
+                        configuration.ChatChannels.ResultsChannel = channel;
+                        configuration.Save();
+                    }
+                    if (isSelected)
+                        ImGui.SetItemDefaultFocus();
+                }
+                ImGui.EndCombo();
+            }
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Channel for posting winners and results");
+
+            // Status Channel
+            var statusChannel = configuration.ChatChannels.StatusChannel;
+            if (ImGui.BeginCombo("Status Channel", statusChannel.ToString()))
+            {
+                foreach (var channel in Enum.GetValues<ChatChannelType>())
+                {
+                    bool isSelected = statusChannel == channel;
+                    if (ImGui.Selectable(channel.ToString(), isSelected))
+                    {
+                        configuration.ChatChannels.StatusChannel = channel;
+                        configuration.Save();
+                    }
+                    if (isSelected)
+                        ImGui.SetItemDefaultFocus();
+                }
+                ImGui.EndCombo();
+            }
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Channel for posting status messages (e.g., 'Rolls are now closed')");
+
+            // Countdown Channel
+            var countdownChannel = configuration.ChatChannels.CountdownChannel;
+            if (ImGui.BeginCombo("Countdown Channel", countdownChannel.ToString()))
+            {
+                foreach (var channel in Enum.GetValues<ChatChannelType>())
+                {
+                    bool isSelected = countdownChannel == channel;
+                    if (ImGui.Selectable(channel.ToString(), isSelected))
+                    {
+                        configuration.ChatChannels.CountdownChannel = channel;
+                        configuration.Save();
+                    }
+                    if (isSelected)
+                        ImGui.SetItemDefaultFocus();
+                }
+                ImGui.EndCombo();
+            }
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Channel for countdown messages (3... 2... 1... Go!)");
+
+            ImGui.Spacing();
+            ImGui.Separator();
+            
+            // Winner-specific channel settings
+            var useWinnerChannels = configuration.ChatChannels.UseWinnerSpecificChannels;
+            if (ImGui.Checkbox("Use Winner-Specific Channels", ref useWinnerChannels))
+            {
+                configuration.ChatChannels.UseWinnerSpecificChannels = useWinnerChannels;
+                configuration.Save();
+            }
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("When enabled, each winner outputs to their own designated channel");
+            
+            if (useWinnerChannels)
+            {
+                ImGui.Indent();
+                ImGui.TextColored(new Vector4(0.9f, 0.7f, 0.3f, 1.0f), "Winner Output Channels:");
+                
+                // Winner 1 Channel
+                var winner1Channel = configuration.ChatChannels.Winner1Channel;
+                if (ImGui.BeginCombo("Winner #1 Channel", winner1Channel.ToString()))
+                {
+                    foreach (var channel in Enum.GetValues<ChatChannelType>())
+                    {
+                        bool isSelected = winner1Channel == channel;
+                        if (ImGui.Selectable(channel.ToString(), isSelected))
+                        {
+                            configuration.ChatChannels.Winner1Channel = channel;
+                            configuration.Save();
+                        }
+                        if (isSelected)
+                            ImGui.SetItemDefaultFocus();
+                    }
+                    ImGui.EndCombo();
+                }
+                
+                // Winner 2 Channel
+                var winner2Channel = configuration.ChatChannels.Winner2Channel;
+                if (ImGui.BeginCombo("Winner #2 Channel", winner2Channel.ToString()))
+                {
+                    foreach (var channel in Enum.GetValues<ChatChannelType>())
+                    {
+                        bool isSelected = winner2Channel == channel;
+                        if (ImGui.Selectable(channel.ToString(), isSelected))
+                        {
+                            configuration.ChatChannels.Winner2Channel = channel;
+                            configuration.Save();
+                        }
+                        if (isSelected)
+                            ImGui.SetItemDefaultFocus();
+                    }
+                    ImGui.EndCombo();
+                }
+                
+                // Winner 3 Channel
+                var winner3Channel = configuration.ChatChannels.Winner3Channel;
+                if (ImGui.BeginCombo("Winner #3 Channel", winner3Channel.ToString()))
+                {
+                    foreach (var channel in Enum.GetValues<ChatChannelType>())
+                    {
+                        bool isSelected = winner3Channel == channel;
+                        if (ImGui.Selectable(channel.ToString(), isSelected))
+                        {
+                            configuration.ChatChannels.Winner3Channel = channel;
+                            configuration.Save();
+                        }
+                        if (isSelected)
+                            ImGui.SetItemDefaultFocus();
+                    }
+                    ImGui.EndCombo();
+                }
+                
+                ImGui.Unindent();
+            }
+            
+            ImGui.Spacing();
+            ImGui.TextColored(new Vector4(0.9f, 0.9f, 0.4f, 1.0f), "Active Channel Commands:");
+            ImGui.Text($"Rules: {configuration.ChatChannels.GetChannelCommand(configuration.ChatChannels.RulesChannel)}");
+            if (useWinnerChannels)
+            {
+                ImGui.Text($"Winner #1: {configuration.ChatChannels.GetChannelCommand(configuration.ChatChannels.Winner1Channel)}");
+                if (configuration.NumberOfWinners >= 2)
+                    ImGui.Text($"Winner #2: {configuration.ChatChannels.GetChannelCommand(configuration.ChatChannels.Winner2Channel)}");
+                if (configuration.NumberOfWinners >= 3)
+                    ImGui.Text($"Winner #3: {configuration.ChatChannels.GetChannelCommand(configuration.ChatChannels.Winner3Channel)}");
+            }
+            else
+            {
+                ImGui.Text($"Results: {configuration.ChatChannels.GetChannelCommand(configuration.ChatChannels.ResultsChannel)}");
+            }
+            ImGui.Text($"Status: {configuration.ChatChannels.GetChannelCommand(configuration.ChatChannels.StatusChannel)}");
+            ImGui.Text($"Countdown: {configuration.ChatChannels.GetChannelCommand(configuration.ChatChannels.CountdownChannel)}");
+        }
+
+        ImGui.Separator();
+
+        // Roll Detection Settings
+        if (ImGui.CollapsingHeader("Roll Detection Settings", ImGuiTreeNodeFlags.DefaultOpen))
+        {
+            var enableRandom = configuration.EnableRandomDetection;
+            if (ImGui.Checkbox("Detect /random rolls", ref enableRandom))
+            {
+                configuration.EnableRandomDetection = enableRandom;
+                configuration.Save();
+            }
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Enable detection of /random commands (e.g., 'Random! Player rolls a 123.')");
+
+            var enableDice = configuration.EnableDiceDetection;
+            if (ImGui.Checkbox("Detect /dice rolls", ref enableDice))
+            {
+                configuration.EnableDiceDetection = enableDice;
+                configuration.Save();
+            }
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Enable detection of /dice commands (e.g., '(Player Name) Random! 923')");
+
+            if (!enableRandom && !enableDice)
+            {
+                ImGui.TextColored(new Vector4(1, 0.5f, 0.5f, 1), "Warning: At least one roll detection method must be enabled!");
             }
         }
 
