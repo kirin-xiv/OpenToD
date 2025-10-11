@@ -3,7 +3,7 @@
     <PropertyGroup>
         <AssemblyName>FFToD</AssemblyName>
         <!-- Single source of truth for version - change ONLY this line to update everywhere -->
-        <Version>2.3.0.1</Version>
+        <Version>2.3.5.0</Version>
         <AssemblyVersion>$(Version)</AssemblyVersion>
         <FileVersion>$(Version)</FileVersion>
         <Authors>Kirin Avenleigh</Authors>

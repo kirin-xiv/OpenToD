@@ -1055,13 +1055,13 @@ public class MainWindow : Window, IDisposable
                 ImGui.SetTooltip("Time to collect rolls before auto-processing results");
                 
             var numWinners = configuration.NumberOfWinners;
-            if (ImGui.SliderInt("Number of Winners", ref numWinners, 1, 3))
+            if (ImGui.SliderInt("Number of Winners", ref numWinners, 1, 2))
             {
                 configuration.NumberOfWinners = numWinners;
                 configuration.Save();
             }
             if (ImGui.IsItemHovered())
-                ImGui.SetTooltip("How many winners to select each round (1-3)");
+                ImGui.SetTooltip("How many winners to select each round (1-2)");
         }
         ImGui.EndChild();
         ModernStyle.PopCardStyle();
@@ -1200,7 +1200,7 @@ public class MainWindow : Window, IDisposable
                 ImGui.TableSetupColumn("Winner", ImGuiTableColumnFlags.WidthFixed, 120);
                 ImGui.TableSetupColumn("Channel", ImGuiTableColumnFlags.WidthStretch);
                 
-                for (int i = 0; i < configuration.NumberOfWinners; i++)
+                for (int i = 0; i < Math.Min(configuration.NumberOfWinners, 2); i++)
                 {
                     ImGui.TableNextRow();
                     ImGui.TableNextColumn();
@@ -1211,7 +1211,6 @@ public class MainWindow : Window, IDisposable
                     {
                         0 => configuration.ChatChannels.Winner1Channel,
                         1 => configuration.ChatChannels.Winner2Channel,
-                        2 => configuration.ChatChannels.Winner3Channel,
                         _ => configuration.ChatChannels.ResultsChannel
                     };
                     
@@ -1226,7 +1225,6 @@ public class MainWindow : Window, IDisposable
                                 {
                                     case 0: configuration.ChatChannels.Winner1Channel = channel; break;
                                     case 1: configuration.ChatChannels.Winner2Channel = channel; break;
-                                    case 2: configuration.ChatChannels.Winner3Channel = channel; break;
                                 }
                                 configuration.Save();
                             }
@@ -1235,6 +1233,62 @@ public class MainWindow : Window, IDisposable
                     }
                 }
                 ImGui.EndTable();
+            }
+        }
+        ImGui.EndChild();
+        ModernStyle.PopCardStyle();
+        
+        ImGui.Spacing();
+        
+        // Jackpot Settings
+        ModernStyle.ApplyCardStyle();
+        if (ImGui.BeginChild("JackpotCard", new Vector2(0, 140), true, ImGuiWindowFlags.NoScrollbar))
+        {
+            ImGui.PushFont(UiBuilder.IconFont);
+            ImGui.TextColored(ModernStyle.AccentPurple, FontAwesomeIcon.Star.ToIconString());
+            ImGui.PopFont();
+            ImGui.SameLine();
+            ImGui.TextColored(ModernStyle.AccentPurple, "Jackpot Settings");
+            ImGui.Separator();
+            ImGui.Spacing();
+            
+            var enableJackpot = configuration.EnableJackpot;
+            if (ImGui.Checkbox("Enable Jackpot System", ref enableJackpot))
+            {
+                configuration.EnableJackpot = enableJackpot;
+                configuration.Save();
+            }
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("When enabled, rolling the jackpot number triggers a special win that supersedes normal winners");
+
+            if (enableJackpot)
+            {
+                var jackpotValue = configuration.JackpotValue;
+                if (ImGui.InputInt("Jackpot Number", ref jackpotValue, 1, 10))
+                {
+                    // Allow any non-negative value
+                    jackpotValue = Math.Max(0, jackpotValue);
+                    configuration.JackpotValue = jackpotValue;
+                    configuration.Save();
+                }
+                if (ImGui.IsItemHovered())
+                    ImGui.SetTooltip("The exact roll number that triggers a jackpot win (0 or higher)");
+                    
+                var jackpotChannel = configuration.ChatChannels.JackpotChannel;
+                if (ImGui.BeginCombo("Jackpot Channel", jackpotChannel.ToString()))
+                {
+                    foreach (var channel in Enum.GetValues<ChatChannelType>())
+                    {
+                        if (ImGui.Selectable(channel.ToString(), jackpotChannel == channel))
+                        {
+                            configuration.ChatChannels.JackpotChannel = channel;
+                            configuration.Save();
+                        }
+                    }
+                    ImGui.EndCombo();
+                }
+                if (ImGui.IsItemHovered())
+                    ImGui.SetTooltip("Channel where jackpot wins are announced");
             }
         }
         ImGui.EndChild();
@@ -1401,7 +1455,7 @@ public class MainWindow : Window, IDisposable
         var features = new[]
         {
             "Automatic roll detection (/random and /dice)",
-            "Multi-winner support (1-3 winners)",
+            "Multi-winner support (1-2 winners) with high/low mode",
             "Smart winner selection with exclusion rules",
             "Multi-channel chat output support",
             "Customizable announcement templates",

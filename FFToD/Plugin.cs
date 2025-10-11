@@ -283,6 +283,24 @@ public sealed class Plugin : IDalamudPlugin
         return firstRoller.Key;
     }
 
+    private string CheckForJackpotWinner()
+    {
+        if (!configuration.EnableJackpot)
+            return "";
+            
+        // Find all players who rolled the jackpot value
+        var jackpotHits = currentRolls.Where(kvp => kvp.Value == configuration.JackpotValue).ToList();
+        
+        if (jackpotHits.Count == 0)
+            return "";
+            
+        if (jackpotHits.Count == 1)
+            return jackpotHits[0].Key;
+            
+        // Multiple jackpot hits - use tiebreaker (first roller wins)
+        return ResolveTiebreaker(jackpotHits);
+    }
+
     private string FindWinnerWithTiebreaker(List<KeyValuePair<string, int>> sortedRolls, string excludePlayer = "")
     {
         if (sortedRolls == null || sortedRolls.Count == 0)
@@ -465,98 +483,142 @@ public sealed class Plugin : IDalamudPlugin
             return;
         }
 
-        // Find winners using tiebreaker logic (skip last winners if possible)
-        var sortedRolls = currentRolls.OrderByDescending(kvp => kvp.Value).ToList();
-        currentRoundWinners.Clear();
-
-        // Determine how many winners we need
-        int winnersNeeded = Math.Min(configuration.NumberOfWinners, sortedRolls.Count);
+        // Check for jackpot winner first - this supersedes all normal logic
+        string jackpotWinner = CheckForJackpotWinner();
         
-        // Find winners, trying to exclude previous winners if possible
-        var availableRolls = sortedRolls.ToList();
-        for (int i = 0; i < winnersNeeded; i++)
-        {
-            // Try to find winner excluding last winners and already selected winners
-            var excludeList = new List<string>();
-            excludeList.AddRange(configuration.LastWinners);
-            excludeList.AddRange(currentRoundWinners);
-            
-            string winner = FindMultipleWinnersWithTiebreaker(availableRolls, excludeList, 1).FirstOrDefault();
-            
-            // If no eligible winner found, try without excluding last winners
-            if (string.IsNullOrEmpty(winner))
-            {
-                excludeList = new List<string>(currentRoundWinners);
-                winner = FindMultipleWinnersWithTiebreaker(availableRolls, excludeList, 1).FirstOrDefault();
-            }
-            
-            // If still no winner, just pick from remaining rolls
-            if (string.IsNullOrEmpty(winner) && availableRolls.Count > currentRoundWinners.Count)
-            {
-                winner = availableRolls.Where(r => !currentRoundWinners.Contains(r.Key)).FirstOrDefault().Key;
-            }
-            
-            if (!string.IsNullOrEmpty(winner))
-            {
-                currentRoundWinners.Add(winner);
-            }
-        }
-
-        // Find strippers (100 or under)
+        // Find strippers (100 or under) - always announce these
         var stripList = currentRolls.Where(kvp => kvp.Value <= 100).Select(kvp => kvp.Key).ToList();
         var stripMessage = stripList.Count > 0 ? string.Join(", ", stripList) : "None";
-
-        // Generate result message
+        
         var statusChannel = configuration.ChatChannels.GetChannelCommand(configuration.ChatChannels.StatusChannel);
         
-        // Auto-post results if enabled
-        if (configuration.AutoPostResults)
+        if (!string.IsNullOrEmpty(jackpotWinner))
         {
-            QueueChatMessage($"{statusChannel} {configuration.Announcements.RollsClosed}");
+            // JACKPOT HIT - this completely replaces normal winner announcements
+            currentRoundWinners.Clear();
+            currentRoundWinners.Add(jackpotWinner);
             
-            if (configuration.ChatChannels.UseWinnerSpecificChannels && currentRoundWinners.Count > 0)
+            // Auto-post jackpot results if enabled
+            if (configuration.AutoPostResults)
             {
-                // Output each winner to their specific channel
-                for (int i = 0; i < currentRoundWinners.Count && i < 3; i++)
+                QueueChatMessage($"{statusChannel} {configuration.Announcements.RollsClosed}");
+                
+                var jackpotChannel = configuration.ChatChannels.GetChannelCommand(configuration.ChatChannels.JackpotChannel);
+                int jackpotRoll = currentRolls.TryGetValue(jackpotWinner, out int roll) ? roll : 0;
+                
+                var jackpotMessage = $"{jackpotChannel} {ProcessAnnouncementTemplate(configuration.Announcements.JackpotWinnerResult, jackpotWinner, jackpotRoll, 1, stripMessage)}";
+                QueueChatMessage(jackpotMessage);
+            }
+        }
+        else
+        {
+            // NORMAL WINNER SELECTION
+            var sortedRolls = currentRolls.OrderByDescending(kvp => kvp.Value).ToList();
+            currentRoundWinners.Clear();
+
+            // Determine how many winners we need (max 2)
+            int winnersNeeded = Math.Min(configuration.NumberOfWinners, Math.Min(2, sortedRolls.Count));
+            
+            if (winnersNeeded == 1)
+            {
+                // Single winner - highest roll
+                var excludeList = new List<string>(configuration.LastWinners);
+                string winner = FindMultipleWinnersWithTiebreaker(sortedRolls, excludeList, 1).FirstOrDefault();
+                
+                // If no eligible winner found, try without excluding last winners
+                if (string.IsNullOrEmpty(winner))
                 {
-                    var winner = currentRoundWinners[i];
-                    int winnerRoll = currentRolls.TryGetValue(winner, out int roll) ? roll : 0;
-                    
-                    // Get the appropriate channel for this winner position
-                    ChatChannelType winnerChannel = i switch
-                    {
-                        0 => configuration.ChatChannels.Winner1Channel,
-                        1 => configuration.ChatChannels.Winner2Channel,
-                        2 => configuration.ChatChannels.Winner3Channel,
-                        _ => configuration.ChatChannels.ResultsChannel
-                    };
-                    
-                    var channelCommand = configuration.ChatChannels.GetChannelCommand(winnerChannel);
-                    
-                    var winnerMessage = $"{channelCommand} {ProcessAnnouncementTemplate(configuration.Announcements.WinnerSpecificResult, winner, winnerRoll, i + 1, stripMessage)}";
-                    QueueChatMessage(winnerMessage);
+                    winner = FindMultipleWinnersWithTiebreaker(sortedRolls, new List<string>(), 1).FirstOrDefault();
+                }
+                
+                if (!string.IsNullOrEmpty(winner))
+                {
+                    currentRoundWinners.Add(winner);
                 }
             }
-            else
+            else if (winnersNeeded == 2)
             {
-                // Use traditional single-channel output
-                var resultsChannel = configuration.ChatChannels.GetChannelCommand(configuration.ChatChannels.ResultsChannel);
+                // Two winners - HIGHEST and LOWEST rolls
+                var excludeList = new List<string>(configuration.LastWinners);
                 
-                if (currentRoundWinners.Count == 1)
+                // Find highest roll winner first
+                string highestWinner = FindMultipleWinnersWithTiebreaker(sortedRolls, excludeList, 1).FirstOrDefault();
+                if (string.IsNullOrEmpty(highestWinner))
                 {
-                    int winnerRoll = currentRolls.TryGetValue(currentRoundWinners[0], out int roll) ? roll : 0;
+                    highestWinner = FindMultipleWinnersWithTiebreaker(sortedRolls, new List<string>(), 1).FirstOrDefault();
+                }
+                
+                if (!string.IsNullOrEmpty(highestWinner))
+                {
+                    currentRoundWinners.Add(highestWinner);
                     
-                    var summaryMessage = $"{resultsChannel} {ProcessAnnouncementTemplate(configuration.Announcements.SingleWinnerResult, currentRoundWinners[0], winnerRoll, 1, stripMessage)}";
-                    QueueChatMessage(summaryMessage);
+                    // Find lowest roll winner (excluding the highest winner)
+                    var sortedRollsAscending = currentRolls.OrderBy(kvp => kvp.Value).ToList();
+                    excludeList.Add(highestWinner); // Also exclude the highest winner we just selected
+                    
+                    string lowestWinner = FindMultipleWinnersWithTiebreaker(sortedRollsAscending, excludeList, 1).FirstOrDefault();
+                    if (string.IsNullOrEmpty(lowestWinner))
+                    {
+                        // Try without excluding last winners, but still exclude the highest winner
+                        excludeList = new List<string> { highestWinner };
+                        lowestWinner = FindMultipleWinnersWithTiebreaker(sortedRollsAscending, excludeList, 1).FirstOrDefault();
+                    }
+                    
+                    if (!string.IsNullOrEmpty(lowestWinner))
+                    {
+                        currentRoundWinners.Add(lowestWinner);
+                    }
+                }
+            }
+
+            // Auto-post normal results if enabled
+            if (configuration.AutoPostResults)
+            {
+                QueueChatMessage($"{statusChannel} {configuration.Announcements.RollsClosed}");
+                
+                if (configuration.ChatChannels.UseWinnerSpecificChannels && currentRoundWinners.Count > 0)
+                {
+                    // Output each winner to their specific channel
+                    for (int i = 0; i < currentRoundWinners.Count && i < 2; i++)
+                    {
+                        var winner = currentRoundWinners[i];
+                        int winnerRoll = currentRolls.TryGetValue(winner, out int roll) ? roll : 0;
+                        
+                        // Get the appropriate channel for this winner position
+                        ChatChannelType winnerChannel = i switch
+                        {
+                            0 => configuration.ChatChannels.Winner1Channel,
+                            1 => configuration.ChatChannels.Winner2Channel,
+                            _ => configuration.ChatChannels.ResultsChannel
+                        };
+                        
+                        var channelCommand = configuration.ChatChannels.GetChannelCommand(winnerChannel);
+                        
+                        var winnerMessage = $"{channelCommand} {ProcessAnnouncementTemplate(configuration.Announcements.WinnerSpecificResult, winner, winnerRoll, i + 1, stripMessage)}";
+                        QueueChatMessage(winnerMessage);
+                    }
                 }
                 else
                 {
-                    var winnerDetails = currentRoundWinners.Select(w => 
-                        $"{w} ({(currentRolls.TryGetValue(w, out int r) ? r : 0)})"
-                    );
+                    // Use traditional single-channel output
+                    var resultsChannel = configuration.ChatChannels.GetChannelCommand(configuration.ChatChannels.ResultsChannel);
                     
-                    var summaryMessage = $"{resultsChannel} {ProcessAnnouncementTemplate(configuration.Announcements.MultipleWinnersResult, "", 0, 0, stripMessage, "", string.Join(", ", winnerDetails))}";
-                    QueueChatMessage(summaryMessage);
+                    if (currentRoundWinners.Count == 1)
+                    {
+                        int winnerRoll = currentRolls.TryGetValue(currentRoundWinners[0], out int roll) ? roll : 0;
+                        
+                        var summaryMessage = $"{resultsChannel} {ProcessAnnouncementTemplate(configuration.Announcements.SingleWinnerResult, currentRoundWinners[0], winnerRoll, 1, stripMessage)}";
+                        QueueChatMessage(summaryMessage);
+                    }
+                    else
+                    {
+                        var winnerDetails = currentRoundWinners.Select(w => 
+                            $"{w} ({(currentRolls.TryGetValue(w, out int r) ? r : 0)})"
+                        );
+                        
+                        var summaryMessage = $"{resultsChannel} {ProcessAnnouncementTemplate(configuration.Announcements.MultipleWinnersResult, "", 0, 0, stripMessage, "", string.Join(", ", winnerDetails))}";
+                        QueueChatMessage(summaryMessage);
+                    }
                 }
             }
         }
@@ -640,7 +702,7 @@ public sealed class Plugin : IDalamudPlugin
                 if (configuration.ChatChannels.UseWinnerSpecificChannels && currentRoundWinners.Count > 0)
                 {
                     // Output each winner to their specific channel
-                    for (int i = 0; i < currentRoundWinners.Count && i < 3; i++)
+                    for (int i = 0; i < currentRoundWinners.Count && i < 2; i++)
                     {
                         var winner = currentRoundWinners[i];
                         int winnerRoll = currentRolls.TryGetValue(winner, out int roll) ? roll : 0;
@@ -650,7 +712,6 @@ public sealed class Plugin : IDalamudPlugin
                         {
                             0 => configuration.ChatChannels.Winner1Channel,
                             1 => configuration.ChatChannels.Winner2Channel,
-                            2 => configuration.ChatChannels.Winner3Channel,
                             _ => configuration.ChatChannels.ResultsChannel
                         };
                         
@@ -741,7 +802,8 @@ public sealed class Plugin : IDalamudPlugin
             .Replace("{WINNER_NUMBER}", winnerNumber.ToString())
             .Replace("{WINNERS_LIST}", winnersList)
             .Replace("{STRIPPERS}", stripMessage)
-            .Replace("{PASSED_FROM}", passedFrom);
+            .Replace("{PASSED_FROM}", passedFrom)
+            .Replace("{JACKPOT_VALUE}", configuration.JackpotValue.ToString());
     }
 
     private void ProcessMessageQueue()

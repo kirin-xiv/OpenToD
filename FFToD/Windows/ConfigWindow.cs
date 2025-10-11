@@ -38,13 +38,13 @@ public class ConfigWindow : Window, IDisposable
                 ImGui.SetTooltip("Time to collect rolls before auto-processing results");
                 
             var numWinners = configuration.NumberOfWinners;
-            if (ImGui.SliderInt("Number of Winners", ref numWinners, 1, 3))
+            if (ImGui.SliderInt("Number of Winners", ref numWinners, 1, 2))
             {
                 configuration.NumberOfWinners = numWinners;
                 configuration.Save();
             }
             if (ImGui.IsItemHovered())
-                ImGui.SetTooltip("How many winners to select each round (1-3)");
+                ImGui.SetTooltip("How many winners to select each round (1-2)");
         }
 
         ImGui.Separator();
@@ -266,23 +266,6 @@ public class ConfigWindow : Window, IDisposable
                     ImGui.EndCombo();
                 }
                 
-                // Winner 3 Channel
-                var winner3Channel = configuration.ChatChannels.Winner3Channel;
-                if (ImGui.BeginCombo("Winner #3 Channel", winner3Channel.ToString()))
-                {
-                    foreach (var channel in Enum.GetValues<ChatChannelType>())
-                    {
-                        bool isSelected = winner3Channel == channel;
-                        if (ImGui.Selectable(channel.ToString(), isSelected))
-                        {
-                            configuration.ChatChannels.Winner3Channel = channel;
-                            configuration.Save();
-                        }
-                        if (isSelected)
-                            ImGui.SetItemDefaultFocus();
-                    }
-                    ImGui.EndCombo();
-                }
                 
                 ImGui.Unindent();
             }
@@ -295,8 +278,6 @@ public class ConfigWindow : Window, IDisposable
                 ImGui.Text($"Winner #1: {configuration.ChatChannels.GetChannelCommand(configuration.ChatChannels.Winner1Channel)}");
                 if (configuration.NumberOfWinners >= 2)
                     ImGui.Text($"Winner #2: {configuration.ChatChannels.GetChannelCommand(configuration.ChatChannels.Winner2Channel)}");
-                if (configuration.NumberOfWinners >= 3)
-                    ImGui.Text($"Winner #3: {configuration.ChatChannels.GetChannelCommand(configuration.ChatChannels.Winner3Channel)}");
             }
             else
             {
@@ -304,6 +285,54 @@ public class ConfigWindow : Window, IDisposable
             }
             ImGui.Text($"Status: {configuration.ChatChannels.GetChannelCommand(configuration.ChatChannels.StatusChannel)}");
             ImGui.Text($"Countdown: {configuration.ChatChannels.GetChannelCommand(configuration.ChatChannels.CountdownChannel)}");
+        }
+
+        ImGui.Separator();
+
+        // Jackpot Settings
+        if (ImGui.CollapsingHeader("Jackpot Settings", ImGuiTreeNodeFlags.DefaultOpen))
+        {
+            var enableJackpot = configuration.EnableJackpot;
+            if (ImGui.Checkbox("Enable Jackpot System", ref enableJackpot))
+            {
+                configuration.EnableJackpot = enableJackpot;
+                configuration.Save();
+            }
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("When enabled, rolling the jackpot number triggers a special win that supersedes normal winners");
+
+            if (enableJackpot)
+            {
+                var jackpotValue = configuration.JackpotValue;
+                if (ImGui.InputInt("Jackpot Number", ref jackpotValue, 1, 10))
+                {
+                    // Allow any non-negative value
+                    jackpotValue = Math.Max(0, jackpotValue);
+                    configuration.JackpotValue = jackpotValue;
+                    configuration.Save();
+                }
+                if (ImGui.IsItemHovered())
+                    ImGui.SetTooltip("The exact roll number that triggers a jackpot win (0 or higher)");
+                    
+                var jackpotChannel = configuration.ChatChannels.JackpotChannel;
+                if (ImGui.BeginCombo("Jackpot Channel", jackpotChannel.ToString()))
+                {
+                    foreach (var channel in Enum.GetValues<ChatChannelType>())
+                    {
+                        bool isSelected = jackpotChannel == channel;
+                        if (ImGui.Selectable(channel.ToString(), isSelected))
+                        {
+                            configuration.ChatChannels.JackpotChannel = channel;
+                            configuration.Save();
+                        }
+                        if (isSelected)
+                            ImGui.SetItemDefaultFocus();
+                    }
+                    ImGui.EndCombo();
+                }
+                if (ImGui.IsItemHovered())
+                    ImGui.SetTooltip("Channel where jackpot wins are announced");
+            }
         }
 
         ImGui.Separator();

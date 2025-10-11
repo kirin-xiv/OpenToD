@@ -42,8 +42,10 @@ public class ChatChannelSettings
     // Winner-specific output channels
     public ChatChannelType Winner1Channel { get; set; } = ChatChannelType.Yell;
     public ChatChannelType Winner2Channel { get; set; } = ChatChannelType.Shout;
-    public ChatChannelType Winner3Channel { get; set; } = ChatChannelType.Say;
     public bool UseWinnerSpecificChannels { get; set; } = false; // Toggle for this feature
+    
+    // Jackpot output channel
+    public ChatChannelType JackpotChannel { get; set; } = ChatChannelType.Yell;
     
     public string GetChannelCommand(ChatChannelType channel)
     {
@@ -103,6 +105,7 @@ public class AnnouncementTemplates
     public string MultipleWinnersResult { get; set; } = "Winners: {WINNERS_LIST} | Strippers: {STRIPPERS}";
     public string WinnerSpecificResult { get; set; } = "Winner #{WINNER_NUMBER}: {WINNER_NAME} ({WINNER_ROLL}) | Strippers: {STRIPPERS}";
     public string PassedWinnerResult { get; set; } = "Winner #{WINNER_NUMBER}: {WINNER_NAME} ({WINNER_ROLL}) (passed from {PASSED_FROM}) | Strippers: {STRIPPERS}";
+    public string JackpotWinnerResult { get; set; } = "JACKPOT! {WINNER_NAME} rolled {JACKPOT_VALUE}! Host decides their fate! | Strippers: {STRIPPERS}";
     
     // Available placeholders info for UI
     public static readonly Dictionary<string, string> PlaceholderDescriptions = new()
@@ -113,10 +116,11 @@ public class AnnouncementTemplates
         {"{CUSTOM_WIFI_MESSAGE}", "Your custom Wi-Fi/Discord message"},
         {"{WINNER_NAME}", "Name of the winner"},
         {"{WINNER_ROLL}", "The winning roll value"},
-        {"{WINNER_NUMBER}", "Winner position (1, 2, 3)"},
+        {"{WINNER_NUMBER}", "Winner position (1, 2)"},
         {"{WINNERS_LIST}", "List of all winners with rolls"},
         {"{STRIPPERS}", "List of players who rolled ≤100"},
-        {"{PASSED_FROM}", "Name of player who passed their win"}
+        {"{PASSED_FROM}", "Name of player who passed their win"},
+        {"{JACKPOT_VALUE}", "The configured jackpot roll number"}
     };
 }
 
@@ -129,11 +133,15 @@ public class Configuration : IPluginConfiguration
     public int RollTimeout { get; set; } = 17; // Matches your macro timing
     public string LocalPlayerName { get; set; } = "";
     public string LastWinner { get; set; } = "";
-    public int NumberOfWinners { get; set; } = 1; // Number of winners to select (1-3)
+    public int NumberOfWinners { get; set; } = 1; // Number of winners to select (1-2)
     public List<string> LastWinners { get; set; } = new List<string>(); // Track multiple last winners
     
     // Debug settings
     public bool DebugMode { get; set; } = false; // Enable debug roll pattern for testing
+    
+    // Jackpot settings
+    public bool EnableJackpot { get; set; } = false; // Enable jackpot roll detection
+    public int JackpotValue { get; set; } = 666; // The jackpot roll number (1-999)
     
     // Auto-post settings
     public bool AutoPostRules { get; set; } = true; // Auto-post rules to shout when starting
