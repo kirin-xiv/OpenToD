@@ -4,9 +4,9 @@
     "net10.0-windows7.0": {
       "DalamudPackager": {
         "type": "Direct",
-        "requested": "[14.0.0, )",
-        "resolved": "14.0.0",
-        "contentHash": "9c1q/eAeAs82mkQWBOaCvbt3GIQxAIadz5b/7pCXDIy9nHPtnRc+tDXEvKR+M36Wvi7n+qBTevRupkLUQp6DFA=="
+        "requested": "[14.0.1, )",
+        "resolved": "14.0.1",
+        "contentHash": "y0WWyUE6dhpGdolK3iKgwys05/nZaVf4ZPtIjpLhJBZvHxkkiE23zYRo7K7uqAgoK/QvK5cqF6l3VG5AbgC6KA=="
       },
       "DotNet.ReproducibleBuilds": {
         "type": "Direct",
@@ -22,17 +22,17 @@
       },
       "Hexa.NET.ImGui": {
         "type": "Direct",
-        "requested": "[2.1.4, )",
-        "resolved": "2.1.4",
-        "contentHash": "EpamPNEWEfKEOj5iOmwRBuW4xen24ZSECWgSYkRkKjfvnFbea5r0idR9peYGXpicFVduPRyG1rV8JM9rX5fdpA==",
+        "requested": "[2.2.9, )",
+        "resolved": "2.2.9",
+        "contentHash": "WFnhZiBZ6UStKqVt43d2hhGCBaJ/TfLRVExnqAO+R3TEbfTQfVjWhcDRUb7n4SvFW7AP9JR8TpCutQZmV62D2A==",
         "dependencies": {
-          "HexaGen.Runtime": "1.1.9"
+          "HexaGen.Runtime": "1.1.21"
         }
       },
       "HexaGen.Runtime": {
         "type": "Transitive",
-        "resolved": "1.1.9",
-        "contentHash": "C35/kzqMUlgHOlwld5w7TzoEedMwrOvzK0oCks4D3ZZf24WKV4f0hTU5pbXJyAKpdcW1ib0BAp4wmEXemGMCaw=="
+        "resolved": "1.1.21",
+        "contentHash": "fxSBIroVyuU1CQUSKsE3IZNOW8FlI58zuU1kIG5ZvDH0jtQq5yTPEvPMoNyMB5PrhzYH/taTMqd85VtxcZPD8g=="
       }
     }
   }
