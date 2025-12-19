@@ -1,9 +1,9 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<Project Sdk="Dalamud.NET.Sdk/13.0.0">
+<Project Sdk="Dalamud.NET.Sdk/14.0.1">
     <PropertyGroup>
         <AssemblyName>FFToD</AssemblyName>
         <!-- Single source of truth for version - change ONLY this line to update everywhere -->
-        <Version>2.3.5.0</Version>
+        <Version>2.3.6.0</Version>
         <AssemblyVersion>$(Version)</AssemblyVersion>
         <FileVersion>$(Version)</FileVersion>
         <Authors>Kirin Avenleigh</Authors>
@@ -11,8 +11,8 @@
         <PackageProjectUrl>https://github.com/kirin-xiv/FFToD-Release</PackageProjectUrl>
         <PackageLicenseExpression>MIT</PackageLicenseExpression>
         <IsPackable>false</IsPackable>
-        <DalamudApiLevel>13</DalamudApiLevel>
-        <TargetFramework>net9.0-windows</TargetFramework>
+        <DalamudApiLevel>14</DalamudApiLevel>
+        <TargetFramework>net10.0-windows7.0</TargetFramework>
     </PropertyGroup>
 
     <!-- Auto-update JSON files with current version before build -->
@@ -20,6 +20,14 @@
         <PackageReference Include="ECommons" Version="*" />
         <PackageReference Include="Hexa.NET.ImGui" Version="2.1.4" />
     </ItemGroup>
+    <!-- Package reference for DalamudPackager -->
+    <ItemGroup>
+        <PackageReference Update="DalamudPackager" Version="14.0.0" />
+    </ItemGroup>
+    <!-- Package the plugin after building in Release mode -->
+    <Target Name="PackagePlugin" AfterTargets="Build" Condition="'$(Configuration)' == 'Release'">
+        <DalamudPackager ProjectDir="$(ProjectDir)" OutputPath="$(OutputPath)" AssemblyName="$(AssemblyName)" MakeZip="true"/>
+    </Target>
 
     <Target Name="UpdateJsonVersions" BeforeTargets="BeforeBuild">
         <Message Text="Updating JSON files to version $(Version)..." Importance="high" />
