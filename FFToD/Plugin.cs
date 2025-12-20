@@ -4,6 +4,7 @@ using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using ECommons;
 using ECommons.Automation;
+using FFToD.Services;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -25,6 +26,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly IDalamudPluginInterface pluginInterface;
     private readonly ICommandManager commandManager;
     private readonly IChatGui chatGui;
+    public IChatGui ChatGui => chatGui;
     private readonly IClientState clientState;
     private readonly IPluginLog pluginLog;
 
@@ -33,23 +35,21 @@ public sealed class Plugin : IDalamudPlugin
     private readonly ConfigWindow configWindow;
     private Configuration configuration;
 
-    // Game state
     private bool isGameActive = false;
     private bool isRollingPhase = false;
     private readonly Dictionary<string, int> currentRolls = new();
-    private readonly Dictionary<string, int> rollOrder = new(); // Track order of rolls for tiebreaking
-    private int rollCounter = 0; // Counter for roll ordering
+    private readonly Dictionary<string, int> rollOrder = new();
+    private int rollCounter = 0;
     private CancellationTokenSource? gameCancellation;
 
-    // Store the current round winners separately from the "last winners" used for exclusion
     private List<string> currentRoundWinners = new List<string>();
+    private bool isJackpotRound = false;
+    
+    private AuthorizedUsersManager? authorizedUsersManager;
 
-    // Message queue for timed chat messages
     private readonly Queue<string> messageQueue = new();
     private DateTime lastMessageSent = DateTime.MinValue;
     private bool waitingForGoMessage = false;
-
-    // Server list for name normalization
     private readonly HashSet<string> serverNames = new()
     {
         "Adamantoise", "Aegis", "Alexander", "Alpha", "Anima", "Asura", "Atomos", "Bahamut",
@@ -81,8 +81,9 @@ public sealed class Plugin : IDalamudPlugin
         configuration = pluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
         configuration.Initialize(pluginInterface);
 
-        // Initialize ECommons
         ECommonsMain.Init(pluginInterface, this);
+
+        authorizedUsersManager = new AuthorizedUsersManager(pluginLog, pluginInterface.ConfigDirectory.FullName);
 
         mainWindow = new MainWindow(this, configuration);
         configWindow = new ConfigWindow(configuration);
@@ -115,7 +116,6 @@ public sealed class Plugin : IDalamudPlugin
         pluginInterface.UiBuilder.OpenConfigUi += OpenConfigUI;
         pluginInterface.UiBuilder.OpenMainUi += OpenMainUI;
 
-        // Subscribe to framework update for timed message sending
         if (pluginInterface.UiBuilder is { } uiBuilder)
         {
             uiBuilder.Draw += ProcessMessageQueue;
@@ -139,13 +139,13 @@ public sealed class Plugin : IDalamudPlugin
         pluginInterface.UiBuilder.OpenConfigUi -= OpenConfigUI;
         pluginInterface.UiBuilder.OpenMainUi -= OpenMainUI;
 
-        // Unsubscribe from framework update
         if (pluginInterface.UiBuilder is { } uiBuilder)
         {
             uiBuilder.Draw -= ProcessMessageQueue;
         }
 
-        // Dispose ECommons
+        authorizedUsersManager?.Dispose();
+
         ECommonsMain.Dispose();
     }
 
@@ -159,11 +159,21 @@ public sealed class Plugin : IDalamudPlugin
 
     private void OnStartCommand(string command, string args)
     {
+        if (!IsUserAuthorized())
+        {
+            chatGui.PrintError("[ToD] You must be logged in to start a game. Open the plugin window and click 'Log In'.");
+            return;
+        }
         StartGame();
     }
 
     private void OnStopCommand(string command, string args)
     {
+        if (!IsUserAuthorized())
+        {
+            chatGui.PrintError("[ToD] You must be logged in to stop a game. Open the plugin window and click 'Log In'.");
+            return;
+        }
         StopGame();
     }
 
@@ -192,17 +202,14 @@ public sealed class Plugin : IDalamudPlugin
         int rollValue = 0;
         bool isValidRoll = false;
 
-        // Check for /random patterns if enabled
         if (configuration.EnableRandomDetection)
         {
             if (configuration.DebugMode)
             {
-                // Debug pattern: "Random! PlayerName roll a 2 (out of 2)." or "Random! You roll a 1 (out of 2)."
                 rollMatch = Regex.Match(messageText, @"Random! (.+) rolls? a (\d+) \(out of \d+\)\.");
             }
             else
             {
-                // Normal pattern: "Random! PlayerName rolls a 123."
                 rollMatch = Regex.Match(messageText, @"Random! (.+) rolls? a (\d+)\.");
             }
             
@@ -214,12 +221,8 @@ public sealed class Plugin : IDalamudPlugin
             }
         }
 
-        // Check for /dice patterns if enabled
         if (!isValidRoll && configuration.EnableDiceDetection)
         {
-            // Dice pattern examples:
-            // "(Kirin Avenleigh) Random! 923"
-            // "(Leonie Avenleigh) Random! 724"
             var diceMatch = Regex.Match(messageText, @"\((.+?)\) Random! (\d+)");
             if (diceMatch.Success)
             {
@@ -248,18 +251,17 @@ public sealed class Plugin : IDalamudPlugin
             }
         }
 
-        // Only accept the first roll from each player
         if (!currentRolls.ContainsKey(normalizedName))
         {
             currentRolls[normalizedName] = rollValue;
-            rollOrder[normalizedName] = rollCounter++; // Track roll order for tiebreaking
+            rollOrder[normalizedName] = rollCounter++;
             pluginLog.Debug($"Roll recorded: {normalizedName} = {rollValue} (order: {rollOrder[normalizedName]})");
         }
     }
 
     private string NormalizePlayerName(string name)
     {
-        // Remove world name if present
+
         foreach (var server in serverNames)
         {
             if (name.EndsWith($" {server}", StringComparison.OrdinalIgnoreCase))
@@ -277,7 +279,7 @@ public sealed class Plugin : IDalamudPlugin
 
     private string ResolveTiebreaker(List<KeyValuePair<string, int>> tiedPlayers)
     {
-        // Among tied players, return the one who rolled first (lowest roll order)
+
         var firstRoller = tiedPlayers.OrderBy(player => rollOrder.TryGetValue(player.Key, out int order) ? order : int.MaxValue).First();
         pluginLog.Debug($"Tiebreaker resolved: {tiedPlayers.Count} players tied at {firstRoller.Value}, winner: {firstRoller.Key} (rolled first)");
         return firstRoller.Key;
@@ -288,7 +290,7 @@ public sealed class Plugin : IDalamudPlugin
         if (!configuration.EnableJackpot)
             return "";
             
-        // Find all players who rolled the jackpot value
+
         var jackpotHits = currentRolls.Where(kvp => kvp.Value == configuration.JackpotValue).ToList();
         
         if (jackpotHits.Count == 0)
@@ -297,7 +299,7 @@ public sealed class Plugin : IDalamudPlugin
         if (jackpotHits.Count == 1)
             return jackpotHits[0].Key;
             
-        // Multiple jackpot hits - use tiebreaker (first roller wins)
+
         return ResolveTiebreaker(jackpotHits);
     }
 
@@ -306,7 +308,7 @@ public sealed class Plugin : IDalamudPlugin
         if (sortedRolls == null || sortedRolls.Count == 0)
             return "";
             
-        // Group players by roll value (highest first due to sorting)
+
         var rollGroups = sortedRolls.GroupBy(kvp => kvp.Value).OrderByDescending(g => g.Key);
         
         foreach (var group in rollGroups)
@@ -316,17 +318,17 @@ public sealed class Plugin : IDalamudPlugin
             
             if (eligiblePlayers.Count == 1)
             {
-                // Single player at this roll value, they win
+
                 return eligiblePlayers[0].Key;
             }
             else
             {
-                // Multiple players tied at this roll value, use tiebreaker
+
                 return ResolveTiebreaker(eligiblePlayers);
             }
         }
         
-        return ""; // No eligible winner found
+        return "";
     }
 
     private string FindWinnerWithTiebreaker(List<KeyValuePair<string, int>> sortedRolls, string excludePlayer1, string excludePlayer2)
@@ -334,7 +336,7 @@ public sealed class Plugin : IDalamudPlugin
         if (sortedRolls == null || sortedRolls.Count == 0)
             return "";
             
-        // Group players by roll value (highest first due to sorting)
+
         var rollGroups = sortedRolls.GroupBy(kvp => kvp.Value).OrderByDescending(g => g.Key);
         
         foreach (var group in rollGroups)
@@ -344,28 +346,28 @@ public sealed class Plugin : IDalamudPlugin
             
             if (eligiblePlayers.Count == 1)
             {
-                // Single player at this roll value, they win
+
                 return eligiblePlayers[0].Key;
             }
             else
             {
-                // Multiple players tied at this roll value, use tiebreaker
+
                 return ResolveTiebreaker(eligiblePlayers);
             }
         }
         
-        return ""; // No eligible winner found
+        return "";
     }
     
-    private List<string> FindMultipleWinnersWithTiebreaker(List<KeyValuePair<string, int>> sortedRolls, List<string> excludePlayers, int count)
+    private List<string> FindMultipleWinnersWithTiebreaker(List<KeyValuePair<string, int>> sortedRolls, List<string> excludePlayers, int count, bool ascending = false)
     {
         var winners = new List<string>();
         
         if (sortedRolls == null || sortedRolls.Count == 0 || count <= 0)
             return winners;
             
-        // Group players by roll value (highest first due to sorting)
-        var rollGroups = sortedRolls.GroupBy(kvp => kvp.Value).OrderByDescending(g => g.Key);
+        var rollGroups = sortedRolls.GroupBy(kvp => kvp.Value);
+        rollGroups = ascending ? rollGroups.OrderBy(g => g.Key) : rollGroups.OrderByDescending(g => g.Key);
         
         foreach (var group in rollGroups)
         {
@@ -379,12 +381,12 @@ public sealed class Plugin : IDalamudPlugin
             
             if (eligiblePlayers.Count == 0) continue;
             
-            // Sort by tiebreaker (who rolled first)
+
             var sortedByTiebreaker = eligiblePlayers.OrderBy(player => 
                 rollOrder.TryGetValue(player.Key, out int order) ? order : int.MaxValue
             ).ToList();
             
-            // Add as many winners as we need from this roll value
+
             int toAdd = Math.Min(count - winners.Count, sortedByTiebreaker.Count);
             for (int i = 0; i < toAdd; i++)
             {
@@ -407,7 +409,7 @@ public sealed class Plugin : IDalamudPlugin
         if (currentRoundWinners.Count > 0)
         {
             configuration.LastWinners = new List<string>(currentRoundWinners);
-            // Keep LastWinner for backwards compatibility
+
             configuration.LastWinner = currentRoundWinners.FirstOrDefault() ?? "";
             configuration.Save();
         }
@@ -421,6 +423,7 @@ public sealed class Plugin : IDalamudPlugin
         rollOrder.Clear(); // Clear roll order tracking
         rollCounter = 0; // Reset roll counter
         currentRoundWinners.Clear(); // Clear current round winners
+        isJackpotRound = false; // Reset jackpot flag
 
         chatGui.Print("[ToD] Game started! Posting rules...");
 
@@ -431,7 +434,7 @@ public sealed class Plugin : IDalamudPlugin
         }
         else
         {
-            // If not auto-posting, start collecting rolls immediately
+
             isRollingPhase = true;
             chatGui.Print("[ToD] Collecting rolls...");
         }
@@ -445,13 +448,13 @@ public sealed class Plugin : IDalamudPlugin
                 {
                     await Task.Delay(configuration.RollTimeout * 1000, gameCancellation.Token);
                     
-                    // Close rolling phase and process results
+
                     isRollingPhase = false;
                     ProcessResults();
                 }
                 catch (OperationCanceledException)
                 {
-                    // Game was cancelled
+
                 }
             });
         }
@@ -486,7 +489,7 @@ public sealed class Plugin : IDalamudPlugin
         // Check for jackpot winner first - this supersedes all normal logic
         string jackpotWinner = CheckForJackpotWinner();
         
-        // Find strippers (100 or under) - always announce these
+
         var stripList = currentRolls.Where(kvp => kvp.Value <= 100).Select(kvp => kvp.Key).ToList();
         var stripMessage = stripList.Count > 0 ? string.Join(", ", stripList) : "None";
         
@@ -494,11 +497,12 @@ public sealed class Plugin : IDalamudPlugin
         
         if (!string.IsNullOrEmpty(jackpotWinner))
         {
-            // JACKPOT HIT - this completely replaces normal winner announcements
+
             currentRoundWinners.Clear();
             currentRoundWinners.Add(jackpotWinner);
+            isJackpotRound = true;
             
-            // Auto-post jackpot results if enabled
+
             if (configuration.AutoPostResults)
             {
                 QueueChatMessage($"{statusChannel} {configuration.Announcements.RollsClosed}");
@@ -512,79 +516,158 @@ public sealed class Plugin : IDalamudPlugin
         }
         else
         {
-            // NORMAL WINNER SELECTION
+            isJackpotRound = false;
             var sortedRolls = currentRolls.OrderByDescending(kvp => kvp.Value).ToList();
             currentRoundWinners.Clear();
 
-            // Determine how many winners we need (max 2)
             int winnersNeeded = Math.Min(configuration.NumberOfWinners, Math.Min(2, sortedRolls.Count));
             
             if (winnersNeeded == 1)
             {
-                // Single winner - highest roll
                 var excludeList = new List<string>(configuration.LastWinners);
-                string winner = FindMultipleWinnersWithTiebreaker(sortedRolls, excludeList, 1).FirstOrDefault();
-                
-                // If no eligible winner found, try without excluding last winners
-                if (string.IsNullOrEmpty(winner))
+
+                switch (configuration.WinnerMode)
                 {
-                    winner = FindMultipleWinnersWithTiebreaker(sortedRolls, new List<string>(), 1).FirstOrDefault();
-                }
-                
-                if (!string.IsNullOrEmpty(winner))
-                {
-                    currentRoundWinners.Add(winner);
+                    case WinnerSelectionMode.BottomLowest:
+                        var sortedAscending = currentRolls.OrderBy(kvp => kvp.Value).ToList();
+                        string winner = FindMultipleWinnersWithTiebreaker(sortedAscending, excludeList, 1, true).FirstOrDefault();
+                        if (string.IsNullOrEmpty(winner))
+                            winner = FindMultipleWinnersWithTiebreaker(sortedAscending, new List<string>(), 1, true).FirstOrDefault();
+                        if (!string.IsNullOrEmpty(winner))
+                            currentRoundWinners.Add(winner);
+                        break;
+
+                    case WinnerSelectionMode.Middle:
+                        var rollsByValue = currentRolls.OrderBy(kvp => kvp.Value).ToList();
+                        var eligibleRolls = rollsByValue.Where(kvp => !excludeList.Contains(kvp.Key)).ToList();
+                        if (eligibleRolls.Count == 0)
+                            eligibleRolls = rollsByValue;
+                        
+                        var middleIndex = eligibleRolls.Count / 2;
+                        if (middleIndex < eligibleRolls.Count)
+                            currentRoundWinners.Add(eligibleRolls[middleIndex].Key);
+                        break;
+
+                    case WinnerSelectionMode.Random:
+                        var eligiblePlayers = currentRolls.Keys.Where(k => !excludeList.Contains(k)).ToList();
+                        if (eligiblePlayers.Count == 0)
+                            eligiblePlayers = currentRolls.Keys.ToList();
+                        var random = new Random();
+                        var randomWinner = eligiblePlayers[random.Next(eligiblePlayers.Count)];
+                        currentRoundWinners.Add(randomWinner);
+                        break;
+
+                    case WinnerSelectionMode.HighestAndLowest:
+                    default:
+                        string defaultWinner = FindMultipleWinnersWithTiebreaker(sortedRolls, excludeList, 1).FirstOrDefault();
+                        if (string.IsNullOrEmpty(defaultWinner))
+                            defaultWinner = FindMultipleWinnersWithTiebreaker(sortedRolls, new List<string>(), 1).FirstOrDefault();
+                        if (!string.IsNullOrEmpty(defaultWinner))
+                            currentRoundWinners.Add(defaultWinner);
+                        break;
                 }
             }
-            else if (winnersNeeded == 2)
+            else if (winnersNeeded >= 2)
             {
-                // Two winners - HIGHEST and LOWEST rolls
                 var excludeList = new List<string>(configuration.LastWinners);
-                
-                // Find highest roll winner first
-                string highestWinner = FindMultipleWinnersWithTiebreaker(sortedRolls, excludeList, 1).FirstOrDefault();
-                if (string.IsNullOrEmpty(highestWinner))
+
+                switch (configuration.WinnerMode)
                 {
-                    highestWinner = FindMultipleWinnersWithTiebreaker(sortedRolls, new List<string>(), 1).FirstOrDefault();
-                }
-                
-                if (!string.IsNullOrEmpty(highestWinner))
-                {
-                    currentRoundWinners.Add(highestWinner);
-                    
-                    // Find lowest roll winner (excluding the highest winner)
-                    var sortedRollsAscending = currentRolls.OrderBy(kvp => kvp.Value).ToList();
-                    excludeList.Add(highestWinner); // Also exclude the highest winner we just selected
-                    
-                    string lowestWinner = FindMultipleWinnersWithTiebreaker(sortedRollsAscending, excludeList, 1).FirstOrDefault();
-                    if (string.IsNullOrEmpty(lowestWinner))
-                    {
-                        // Try without excluding last winners, but still exclude the highest winner
-                        excludeList = new List<string> { highestWinner };
-                        lowestWinner = FindMultipleWinnersWithTiebreaker(sortedRollsAscending, excludeList, 1).FirstOrDefault();
-                    }
-                    
-                    if (!string.IsNullOrEmpty(lowestWinner))
-                    {
-                        currentRoundWinners.Add(lowestWinner);
-                    }
+                    case WinnerSelectionMode.TopHighest:
+                        var topWinners = FindMultipleWinnersWithTiebreaker(sortedRolls, excludeList, winnersNeeded);
+                        if (topWinners.Count < winnersNeeded)
+                            topWinners = FindMultipleWinnersWithTiebreaker(sortedRolls, new List<string>(), winnersNeeded);
+                        currentRoundWinners.AddRange(topWinners);
+                        break;
+
+                    case WinnerSelectionMode.HighestAndLowest:
+                        string highestWinner = FindMultipleWinnersWithTiebreaker(sortedRolls, excludeList, 1).FirstOrDefault();
+                        if (string.IsNullOrEmpty(highestWinner))
+                            highestWinner = FindMultipleWinnersWithTiebreaker(sortedRolls, new List<string>(), 1).FirstOrDefault();
+
+                        if (!string.IsNullOrEmpty(highestWinner))
+                        {
+                            currentRoundWinners.Add(highestWinner);
+
+                            var sortedAscending = currentRolls.OrderBy(kvp => kvp.Value).ToList();
+                            excludeList.Add(highestWinner);
+                            string lowestWinner = FindMultipleWinnersWithTiebreaker(sortedAscending, excludeList, 1, true).FirstOrDefault();
+                            if (string.IsNullOrEmpty(lowestWinner))
+                            {
+                                excludeList = new List<string> { highestWinner };
+                                lowestWinner = FindMultipleWinnersWithTiebreaker(sortedAscending, excludeList, 1, true).FirstOrDefault();
+                            }
+
+                            if (!string.IsNullOrEmpty(lowestWinner))
+                                currentRoundWinners.Add(lowestWinner);
+
+                            if (winnersNeeded > 2 && currentRoundWinners.Count < winnersNeeded)
+                            {
+                                excludeList = new List<string>(configuration.LastWinners);
+                                excludeList.AddRange(currentRoundWinners);
+                                var nextWinner = FindMultipleWinnersWithTiebreaker(sortedRolls, excludeList, 1).FirstOrDefault();
+                                if (!string.IsNullOrEmpty(nextWinner))
+                                    currentRoundWinners.Add(nextWinner);
+                            }
+                        }
+                        break;
+
+                    case WinnerSelectionMode.BottomLowest:
+                        var sortedLowest = currentRolls.OrderBy(kvp => kvp.Value).ToList();
+                        var bottomWinners = FindMultipleWinnersWithTiebreaker(sortedLowest, excludeList, winnersNeeded, true);
+                        if (bottomWinners.Count < winnersNeeded)
+                            bottomWinners = FindMultipleWinnersWithTiebreaker(sortedLowest, new List<string>(), winnersNeeded, true);
+                        currentRoundWinners.AddRange(bottomWinners);
+                        break;
+
+                    case WinnerSelectionMode.Random:
+                        var eligiblePlayers = currentRolls.Keys.Where(k => !excludeList.Contains(k)).ToList();
+                        if (eligiblePlayers.Count < winnersNeeded)
+                            eligiblePlayers = currentRolls.Keys.ToList();
+
+                        var random = new Random();
+                        var shuffled = eligiblePlayers.OrderBy(x => random.Next()).Take(winnersNeeded).ToList();
+                        currentRoundWinners.AddRange(shuffled);
+                        break;
+
+                    case WinnerSelectionMode.Middle:
+                        var rollsByValue = currentRolls.OrderBy(kvp => kvp.Value).ToList();
+                        
+                        var eligibleRolls = rollsByValue.Where(kvp => !excludeList.Contains(kvp.Key)).ToList();
+                        if (eligibleRolls.Count == 0)
+                            eligibleRolls = rollsByValue;
+                            
+                        var middleIndex = eligibleRolls.Count / 2;
+                        if (winnersNeeded == 1 || eligibleRolls.Count <= 2)
+                        {
+                            if (middleIndex < eligibleRolls.Count)
+                                currentRoundWinners.Add(eligibleRolls[middleIndex].Key);
+                        }
+                        else
+                        {
+                            int startIndex = Math.Max(0, middleIndex - (winnersNeeded / 2));
+                            for (int i = 0; i < winnersNeeded && (startIndex + i) < eligibleRolls.Count; i++)
+                            {
+                                currentRoundWinners.Add(eligibleRolls[startIndex + i].Key);
+                            }
+                        }
+                        break;
                 }
             }
 
-            // Auto-post normal results if enabled
             if (configuration.AutoPostResults)
             {
                 QueueChatMessage($"{statusChannel} {configuration.Announcements.RollsClosed}");
                 
                 if (configuration.ChatChannels.UseWinnerSpecificChannels && currentRoundWinners.Count > 0)
                 {
-                    // Output each winner to their specific channel
+
                     for (int i = 0; i < currentRoundWinners.Count && i < 2; i++)
                     {
                         var winner = currentRoundWinners[i];
                         int winnerRoll = currentRolls.TryGetValue(winner, out int roll) ? roll : 0;
                         
-                        // Get the appropriate channel for this winner position
+
                         ChatChannelType winnerChannel = i switch
                         {
                             0 => configuration.ChatChannels.Winner1Channel,
@@ -600,7 +683,7 @@ public sealed class Plugin : IDalamudPlugin
                 }
                 else
                 {
-                    // Use traditional single-channel output
+
                     var resultsChannel = configuration.ChatChannels.GetChannelCommand(configuration.ChatChannels.ResultsChannel);
                     
                     if (currentRoundWinners.Count == 1)
@@ -624,6 +707,10 @@ public sealed class Plugin : IDalamudPlugin
         }
 
         isGameActive = false;
+        
+        configuration.Statistics.IncrementRounds();
+        configuration.Save();
+        
         pluginLog.Debug($"Game complete. Winners: {string.Join(", ", currentRoundWinners)}. Strip list: {stripMessage}");
     }
 
@@ -638,6 +725,13 @@ public sealed class Plugin : IDalamudPlugin
     {
         if (currentRoundWinners.Count == 0 || currentRolls.Count < 2)
             return;
+            
+
+        if (isJackpotRound)
+        {
+            pluginLog.Warning("Attempted to pass a jackpot winner - this is not allowed");
+            return;
+        }
 
         // If no specific winner specified, use the first one (for single winner scenario)
         if (string.IsNullOrEmpty(winnerToPas))
@@ -648,7 +742,7 @@ public sealed class Plugin : IDalamudPlugin
             }
             else
             {
-                // Multiple winners exist but none specified - this should be handled by UI
+
                 pluginLog.Warning("PassWinnerToNext called with multiple winners but no specific winner specified");
                 return;
             }
@@ -661,15 +755,15 @@ public sealed class Plugin : IDalamudPlugin
         // Find next eligible winner using tiebreaker logic
         var sortedRolls = currentRolls.OrderByDescending(kvp => kvp.Value).ToList();
         
-        // Build exclude list: all current winners + last round's winners
+
         var excludeList = new List<string>();
         excludeList.AddRange(currentRoundWinners);
         excludeList.AddRange(configuration.LastWinners);
         
-        // Try to find a replacement winner
+
         var replacement = FindMultipleWinnersWithTiebreaker(sortedRolls, excludeList, 1).FirstOrDefault();
         
-        // If no eligible winner found, try without excluding last winners
+
         if (string.IsNullOrEmpty(replacement))
         {
             excludeList = new List<string>(currentRoundWinners);
@@ -678,7 +772,7 @@ public sealed class Plugin : IDalamudPlugin
         
         if (!string.IsNullOrEmpty(replacement))
         {
-            // Update last winners to include the passed winner
+
             if (!configuration.LastWinners.Contains(winnerToPas))
             {
                 configuration.LastWinners.Add(winnerToPas);
@@ -696,18 +790,18 @@ public sealed class Plugin : IDalamudPlugin
 
             // Generate new winner message
             
-            // Auto-post new winner if enabled
+
             if (configuration.AutoPostResults)
             {
                 if (configuration.ChatChannels.UseWinnerSpecificChannels && currentRoundWinners.Count > 0)
                 {
-                    // Output each winner to their specific channel
+
                     for (int i = 0; i < currentRoundWinners.Count && i < 2; i++)
                     {
                         var winner = currentRoundWinners[i];
                         int winnerRoll = currentRolls.TryGetValue(winner, out int roll) ? roll : 0;
                         
-                        // Get the appropriate channel for this winner position
+
                         ChatChannelType winnerChannel = i switch
                         {
                             0 => configuration.ChatChannels.Winner1Channel,
@@ -717,16 +811,16 @@ public sealed class Plugin : IDalamudPlugin
                         
                         var channelCommand = configuration.ChatChannels.GetChannelCommand(winnerChannel);
                         
-                        // Use appropriate template based on whether this winner was passed
+
                         if (winner == replacement)
                         {
-                            // This is the new winner who received the pass
+
                             var winnerMessage = $"{channelCommand} {ProcessAnnouncementTemplate(configuration.Announcements.PassedWinnerResult, winner, winnerRoll, i + 1, stripMessage, winnerToPas)}";
                             QueueChatMessage(winnerMessage);
                         }
                         else
                         {
-                            // Regular winner, use normal template
+
                             var winnerMessage = $"{channelCommand} {ProcessAnnouncementTemplate(configuration.Announcements.WinnerSpecificResult, winner, winnerRoll, i + 1, stripMessage)}";
                             QueueChatMessage(winnerMessage);
                         }
@@ -734,7 +828,7 @@ public sealed class Plugin : IDalamudPlugin
                 }
                 else
                 {
-                    // Use traditional single-channel output
+
                     var resultsChannel = configuration.ChatChannels.GetChannelCommand(configuration.ChatChannels.ResultsChannel);
                     
                     if (currentRoundWinners.Count == 1)
@@ -766,6 +860,10 @@ public sealed class Plugin : IDalamudPlugin
     {
         if (currentRoundWinners.Count == 0 || isGameActive || currentRolls.Count < 2)
             return false;
+            
+
+        if (isJackpotRound)
+            return false;
 
         // Check if there's at least one other player besides current winners
         var eligibleCount = currentRolls.Count(kvp => !currentRoundWinners.Contains(kvp.Key));
@@ -788,7 +886,7 @@ public sealed class Plugin : IDalamudPlugin
             rollInstructions += "(/dice)";
         rollInstructions += " chooses someone this round.";
         
-        string multiWinnerText = configuration.NumberOfWinners > 1 ? $" Top {configuration.NumberOfWinners} players win!" : "";
+        string multiWinnerText = configuration.NumberOfWinners > 1 ? $" {GetWinnerSelectionText()}!" : "";
         string noRepeatText = configuration.NumberOfWinners > 1 ? "Winners cannot win two rounds in a row." : "You cannot win two rounds in a row.";
         var resultsChannel = configuration.ChatChannels.GetChannelCommand(configuration.ChatChannels.ResultsChannel);
         
@@ -808,7 +906,7 @@ public sealed class Plugin : IDalamudPlugin
 
     private void ProcessMessageQueue()
     {
-        // Process message queue with 2-second delays
+
         if (messageQueue.Count > 0)
         {
             var timeSinceLastMessage = DateTime.Now - lastMessageSent;
@@ -827,15 +925,15 @@ public sealed class Plugin : IDalamudPlugin
         PostToChat(message);
         lastMessageSent = DateTime.Now;
         
-        // Check if this was the "Go!" message to start collecting rolls
+
         var countdownChannel = configuration.ChatChannels.GetChannelCommand(configuration.ChatChannels.CountdownChannel);
-        if (message == $"{countdownChannel} Go!" && waitingForGoMessage)
+        if (message == $"{countdownChannel} {configuration.Announcements.CountdownGo}" && waitingForGoMessage)
         {
             isRollingPhase = true;
             waitingForGoMessage = false;
             chatGui.Print("[ToD] Go! Now collecting rolls...");
             
-            // NOW start the 17-second timer for roll collection
+
             _ = Task.Run(async () =>
             {
                 try
@@ -860,7 +958,7 @@ public sealed class Plugin : IDalamudPlugin
                 }
                 catch (OperationCanceledException)
                 {
-                    // Game was cancelled
+
                 }
             });
         }
@@ -873,14 +971,14 @@ public sealed class Plugin : IDalamudPlugin
 
     private void PostGameRules()
     {
-        // Set flag to enable rolling when "Go!" is posted
+
         waitingForGoMessage = true;
         
         var rulesChannel = configuration.ChatChannels.GetChannelCommand(configuration.ChatChannels.RulesChannel);
         var countdownChannel = configuration.ChatChannels.GetChannelCommand(configuration.ChatChannels.CountdownChannel);
         var resultsChannel = configuration.ChatChannels.GetChannelCommand(configuration.ChatChannels.ResultsChannel);
         
-        // Build roll instructions based on enabled detection
+
         var rollInstructions = "High roll ";
         if (configuration.EnableRandomDetection && configuration.EnableDiceDetection)
             rollInstructions += "(/random or /dice)";
@@ -890,11 +988,10 @@ public sealed class Plugin : IDalamudPlugin
             rollInstructions += "(/dice)";
         rollInstructions += " chooses someone this round.";
         
-        // Add multi-winner text if needed
         if (configuration.NumberOfWinners > 1)
-            rollInstructions += $" Top {configuration.NumberOfWinners} players win!";
+            rollInstructions += $" {GetWinnerSelectionText()}!";
         
-        // Queue the complete macro sequence using templates
+
         QueueChatMessage($"{rulesChannel} {ProcessAnnouncementTemplate(configuration.Announcements.RulesLine1)}");
         QueueChatMessage($"{rulesChannel} {ProcessAnnouncementTemplate(configuration.Announcements.RulesLine2)}");
         QueueChatMessage($"{rulesChannel} {ProcessAnnouncementTemplate(configuration.Announcements.RulesLine3)}");
@@ -921,11 +1018,92 @@ public sealed class Plugin : IDalamudPlugin
 
     public void OpenConfigWindow()
     {
-        // Settings are now integrated into the main window as a tab
+
         mainWindow.IsOpen = true;
     }
 
     private void DrawUI() => WindowSystem.Draw();
     private void OpenConfigUI() => configWindow.IsOpen = true;
     private void OpenMainUI() => mainWindow.IsOpen = true;
+
+    private string GetWinnerSelectionText()
+    {
+        return (configuration.NumberOfWinners, configuration.WinnerMode) switch
+        {
+            (1, WinnerSelectionMode.TopHighest) => "Highest roller wins",
+            (1, WinnerSelectionMode.BottomLowest) => "Lowest roller wins", 
+            (1, WinnerSelectionMode.Random) => "Random player wins",
+            (1, WinnerSelectionMode.Middle) => "Middle roller wins",
+            (1, WinnerSelectionMode.HighestAndLowest) => "Highest roller wins", // Fallback to highest for 1 winner
+            
+            (2, WinnerSelectionMode.TopHighest) => "Top 2 players win",
+            (2, WinnerSelectionMode.HighestAndLowest) => "Highest and lowest players win",
+            (2, WinnerSelectionMode.BottomLowest) => "Bottom 2 players win",
+            (2, WinnerSelectionMode.Random) => "2 random players win", 
+            (2, WinnerSelectionMode.Middle) => "Middle 2 players win",
+            
+            _ => $"Top {configuration.NumberOfWinners} players win"
+        };
+    }
+
+    // Authentication methods
+    public bool TryAuthenticate()
+    {
+        var currentUser = GetCurrentUserIdentifier();
+        if (string.IsNullOrEmpty(currentUser))
+        {
+            pluginLog.Warning("Cannot authenticate: No character information available");
+            return false;
+        }
+
+        if (authorizedUsersManager == null)
+        {
+            pluginLog.Error("Authorization manager not initialized");
+            return false;
+        }
+
+        var authorizedUsers = authorizedUsersManager.GetAuthorizedUsersSync();
+        var isAuthorized = authorizedUsers.Contains(currentUser);
+        
+        if (isAuthorized)
+        {
+            configuration.IsAuthenticated = true;
+            configuration.Save();
+            pluginLog.Information($"Authentication successful for: {currentUser}");
+        }
+        else
+        {
+            pluginLog.Warning($"Authentication failed for: {currentUser} (not in authorized users list)");
+        }
+
+        return isAuthorized;
+    }
+
+    public void Logout()
+    {
+        configuration.IsAuthenticated = false;
+        configuration.Save();
+        pluginLog.Information("User logged out");
+    }
+
+    public string GetCurrentUserIdentifier()
+    {
+        if (clientState.LocalPlayer == null) return "";
+        
+        var characterName = clientState.LocalPlayer.Name.TextValue;
+        var worldName = clientState.LocalPlayer.HomeWorld.Value.Name.ToString() ?? "";
+        
+        return string.IsNullOrEmpty(worldName) ? "" : $"{characterName}@{worldName}";
+    }
+
+    public bool IsUserAuthorized()
+    {
+        return configuration.IsAuthenticated;
+    }
+
+    public void ResetSessionStatistics()
+    {
+        configuration.Statistics.ResetSession();
+        configuration.Save();
+    }
 }

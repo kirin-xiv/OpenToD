@@ -3,24 +3,60 @@ using Dalamud.Bindings.ImGui;
 using System;
 using System.Linq;
 using System.Numerics;
+using System.IO;
+using Dalamud.Interface.Utility;
+using Dalamud.Interface;
 
 namespace FFToD;
 
 public class ConfigWindow : Window, IDisposable
 {
     private readonly Configuration configuration;
+    private string newProfileName = "";
+    private string selectedProfile = "";
+    private bool showExportDialog = false;
+    private bool showImportDialog = false;
+    private string exportPath = "";
+    private string importPath = "";
+    private bool exportAllProfiles = false;
+    private string lastImportError = "";
 
     public ConfigWindow(Configuration configuration)
         : base("Truth or Dare Configuration##ConfigWindow", ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse)
     {
         this.configuration = configuration;
 
-        Size = new Vector2(600, 750);
+        Size = new Vector2(600, 850);
         SizeCondition = ImGuiCond.Always;
     }
 
     public void Dispose()
     {
+    }
+
+    private static class ModernStyle
+    {
+        public static Vector4 TextPrimary = new(1.0f, 1.0f, 1.0f, 1.0f);
+        public static Vector4 TextSecondary = new(0.8f, 0.8f, 0.8f, 1.0f);
+        public static Vector4 AccentPurple = new(0.8f, 0.6f, 1.0f, 1.0f);
+        public static Vector4 SuccessGreen = new(0.4f, 1.0f, 0.4f, 1.0f);
+        public static Vector4 WarningYellow = new(1.0f, 0.9f, 0.2f, 1.0f);
+        public static Vector4 DangerRed = new(1.0f, 0.3f, 0.3f, 1.0f);
+        public static Vector4 CardBackground = new(0.15f, 0.15f, 0.2f, 0.9f);
+
+        public static void ApplyCardStyle()
+        {
+            ImGui.PushStyleColor(ImGuiCol.ChildBg, CardBackground);
+            ImGui.PushStyleVar(ImGuiStyleVar.ChildRounding, 8.0f);
+            ImGui.PushStyleVar(ImGuiStyleVar.ChildBorderSize, 1.0f);
+            ImGui.PushStyleColor(ImGuiCol.Border, AccentPurple);
+        }
+
+        public static void PopCardStyle()
+        {
+            ImGui.PopStyleColor(2);
+            ImGui.PopStyleVar(2);
+        }
     }
 
     public override void Draw()
@@ -390,6 +426,14 @@ public class ConfigWindow : Window, IDisposable
 
         ImGui.Separator();
 
+        // Profile Management
+        if (ImGui.CollapsingHeader("Profile Management", ImGuiTreeNodeFlags.DefaultOpen))
+        {
+            DrawProfileManagementSection();
+        }
+
+        ImGui.Separator();
+
         // Save button
         if (ImGui.Button("Save & Close", new Vector2(120, 30)))
         {
@@ -403,5 +447,292 @@ public class ConfigWindow : Window, IDisposable
         {
             IsOpen = false;
         }
+
+        DrawExportDialog();
+        DrawImportDialog();
+    }
+
+    private void DrawProfileManagementSection()
+    {
+        ModernStyle.ApplyCardStyle();
+        var cardSize = new Vector2(ImGui.GetContentRegionAvail().X, 200);
+        if (ImGui.BeginChild("ProfileCard", cardSize, true))
+        {
+            ImGui.Spacing();
+            ImGui.PushFont(UiBuilder.IconFont);
+            ImGui.TextColored(ModernStyle.AccentPurple, FontAwesomeIcon.User.ToIconString());
+            ImGui.PopFont();
+            ImGui.SameLine();
+            ImGui.TextColored(ModernStyle.TextPrimary, "Profile Management");
+            ImGui.Spacing();
+
+            ImGui.Text("Current Profile:");
+            ImGui.SameLine();
+            ImGui.TextColored(ModernStyle.SuccessGreen, string.IsNullOrEmpty(configuration.CurrentProfileName) ? "Default" : configuration.CurrentProfileName);
+            ImGui.Spacing();
+
+            var availableProfiles = configuration.GetProfileNames();
+            
+            // Profile Selection
+            ImGui.SetNextItemWidth(200);
+            if (ImGui.BeginCombo("##ProfileSelect", string.IsNullOrEmpty(selectedProfile) ? "Select Profile..." : selectedProfile))
+            {
+                foreach (var profile in availableProfiles)
+                {
+                    bool isSelected = selectedProfile == profile;
+                    if (ImGui.Selectable(profile, isSelected))
+                    {
+                        selectedProfile = profile;
+                    }
+                    if (isSelected)
+                        ImGui.SetItemDefaultFocus();
+                }
+                ImGui.EndCombo();
+            }
+
+            ImGui.SameLine();
+            if (ImGui.Button("Load", new Vector2(60, 0)) && !string.IsNullOrEmpty(selectedProfile))
+            {
+                if (configuration.LoadProfile(selectedProfile))
+                {
+                    selectedProfile = "";
+                }
+            }
+
+            ImGui.SameLine();
+            if (ImGui.Button("Delete", new Vector2(60, 0)) && !string.IsNullOrEmpty(selectedProfile))
+            {
+                if (configuration.DeleteProfile(selectedProfile))
+                {
+                    selectedProfile = "";
+                }
+            }
+
+            // Save New Profile
+            ImGui.SetNextItemWidth(200);
+            ImGui.InputTextWithHint("##NewProfileName", "Enter profile name...", ref newProfileName, 50);
+            
+            ImGui.Spacing();
+            
+            bool hasProfileName = !string.IsNullOrWhiteSpace(newProfileName);
+            
+            // Save Current Settings button
+            if (!hasProfileName)
+            {
+                ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(0.3f, 0.3f, 0.3f, 0.5f));
+                ImGui.PushStyleColor(ImGuiCol.ButtonHovered, new Vector4(0.3f, 0.3f, 0.3f, 0.5f));
+                ImGui.PushStyleColor(ImGuiCol.ButtonActive, new Vector4(0.3f, 0.3f, 0.3f, 0.5f));
+            }
+            
+            if (ImGui.Button("Save Current Settings", new Vector2(140, 0)) && hasProfileName)
+            {
+                if (configuration.SaveCurrentAsProfile(newProfileName.Trim()))
+                {
+                    newProfileName = "";
+                }
+            }
+            
+            if (!hasProfileName)
+            {
+                ImGui.PopStyleColor(3);
+                if (ImGui.IsItemHovered())
+                    ImGui.SetTooltip("A profile name is required to save");
+            }
+            
+            ImGui.SameLine();
+            
+            // Save from Clipboard button
+            if (!hasProfileName)
+            {
+                ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(0.3f, 0.3f, 0.3f, 0.5f));
+                ImGui.PushStyleColor(ImGuiCol.ButtonHovered, new Vector4(0.3f, 0.3f, 0.3f, 0.5f));
+                ImGui.PushStyleColor(ImGuiCol.ButtonActive, new Vector4(0.3f, 0.3f, 0.3f, 0.5f));
+            }
+            
+            if (ImGui.Button("Save from Clipboard", new Vector2(130, 0)) && hasProfileName)
+            {
+                if (configuration.SaveFromClipboard(newProfileName.Trim()))
+                {
+                    newProfileName = "";
+                }
+            }
+            
+            if (!hasProfileName)
+            {
+                ImGui.PopStyleColor(3);
+                if (ImGui.IsItemHovered())
+                    ImGui.SetTooltip("A profile name is required to save");
+            }
+
+            // Export/Import Section
+            ImGui.Spacing();
+            ImGui.Separator();
+            ImGui.Spacing();
+            
+            if (ImGui.Button("Export Profile", new Vector2(110, 0)))
+            {
+                exportAllProfiles = false;
+                showExportDialog = true;
+            }
+            if (ImGui.IsItemHovered())
+            {
+                var hoverText = string.IsNullOrEmpty(selectedProfile) 
+                    ? "Export current configuration settings" 
+                    : $"Export selected profile '{selectedProfile}'";
+                ImGui.SetTooltip(hoverText);
+            }
+            
+            ImGui.SameLine();
+            if (ImGui.Button("Export All", new Vector2(85, 0)))
+            {
+                exportAllProfiles = true;
+                showExportDialog = true;
+            }
+            
+            ImGui.SameLine();
+            if (ImGui.Button("Import", new Vector2(65, 0)))
+            {
+                showImportDialog = true;
+            }
+        }
+        ImGui.EndChild();
+        ModernStyle.PopCardStyle();
+    }
+
+    private void DrawExportDialog()
+    {
+        if (!showExportDialog) return;
+
+        ImGui.SetNextWindowSize(new Vector2(400, 200), ImGuiCond.FirstUseEver);
+        if (ImGui.Begin("Export Profile", ref showExportDialog))
+        {
+            if (exportAllProfiles)
+            {
+                ImGui.Text("Export all profiles to file:");
+            }
+            else
+            {
+                var profileToExport = string.IsNullOrEmpty(selectedProfile) ? "Current Settings" : selectedProfile;
+                ImGui.Text($"Export profile '{profileToExport}' to file:");
+            }
+            
+            ImGui.Spacing();
+            ImGui.SetNextItemWidth(-1);
+            ImGui.InputTextWithHint("##ExportPath", "Enter file path...", ref exportPath, 300);
+            
+            ImGui.Spacing();
+            if (ImGui.Button("Browse", new Vector2(70, 0)))
+            {
+                // TODO: Add file dialog here if available
+            }
+            
+            ImGui.SameLine();
+            if (ImGui.Button("Export", new Vector2(70, 0)) && !string.IsNullOrWhiteSpace(exportPath))
+            {
+                try
+                {
+                    if (exportAllProfiles)
+                    {
+                        configuration.ExportAllProfiles(exportPath);
+                    }
+                    else
+                    {
+                        var profileToExport = string.IsNullOrEmpty(selectedProfile) ? "Default" : selectedProfile;
+                        configuration.ExportProfile(profileToExport, exportPath);
+                    }
+                    showExportDialog = false;
+                    exportPath = "";
+                }
+                catch (Exception)
+                {
+                    // TODO: Show error message
+                }
+            }
+            
+            ImGui.SameLine();
+            if (ImGui.Button("Cancel", new Vector2(70, 0)))
+            {
+                showExportDialog = false;
+                exportPath = "";
+            }
+        }
+        ImGui.End();
+    }
+
+    private void DrawImportDialog()
+    {
+        if (!showImportDialog) return;
+
+        ImGui.SetNextWindowSize(new Vector2(400, 200), ImGuiCond.FirstUseEver);
+        if (ImGui.Begin("Import Profile", ref showImportDialog))
+        {
+            ImGui.Text("Import profile(s) from file:");
+            ImGui.Spacing();
+            
+            ImGui.SetNextItemWidth(-1);
+            ImGui.InputTextWithHint("##ImportPath", "Enter file path...", ref importPath, 300);
+            
+            ImGui.Spacing();
+            if (ImGui.Button("Browse", new Vector2(70, 0)))
+            {
+                // TODO: Add file dialog here if available
+            }
+            
+            ImGui.SameLine();
+            if (ImGui.Button("Import", new Vector2(70, 0)) && !string.IsNullOrWhiteSpace(importPath))
+            {
+                try
+                {
+                    if (File.Exists(importPath))
+                    {
+                        var content = File.ReadAllText(importPath);
+                        
+                        // Try to determine if it's a single profile or multiple profiles
+                        bool success = false;
+                        if (content.TrimStart().StartsWith("["))
+                        {
+                            // Array - multiple profiles
+                            success = configuration.ImportAllProfiles(importPath);
+                        }
+                        else
+                        {
+                            // Object - single profile
+                            success = configuration.ImportProfile(importPath);
+                        }
+                        
+                        if (success)
+                        {
+                            showImportDialog = false;
+                            importPath = "";
+                            lastImportError = "";
+                        }
+                        else
+                        {
+                            lastImportError = "Failed to import profile. Check that the file contains valid profile data.";
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    lastImportError = $"Import failed: {ex.Message}";
+                }
+            }
+            
+            ImGui.SameLine();
+            if (ImGui.Button("Cancel", new Vector2(70, 0)))
+            {
+                showImportDialog = false;
+                importPath = "";
+                lastImportError = "";
+            }
+            
+            // Show error message if import failed
+            if (!string.IsNullOrEmpty(lastImportError))
+            {
+                ImGui.Spacing();
+                ImGui.TextColored(new Vector4(1.0f, 0.3f, 0.3f, 1.0f), lastImportError);
+            }
+        }
+        ImGui.End();
     }
 }

@@ -3,7 +3,11 @@
     <PropertyGroup>
         <AssemblyName>FFToD</AssemblyName>
         <!-- Single source of truth for version - change ONLY this line to update everywhere -->
+<<<<<<< Updated upstream
         <Version>2.3.7.0</Version>
+=======
+        <Version>2.4.6.0</Version>
+>>>>>>> Stashed changes
         <AssemblyVersion>$(Version)</AssemblyVersion>
         <FileVersion>$(Version)</FileVersion>
         <Authors>Kirin Avenleigh</Authors>

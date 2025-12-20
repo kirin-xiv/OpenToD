@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
+using System.IO;
 using HexaImGui = Hexa.NET.ImGui.ImGui;
 
 namespace FFToD;
@@ -50,7 +51,8 @@ public class MainWindow : Window, IDisposable
         public static Vector4 SuccessGreenHover { get; private set; } = new(0.3f, 0.9f, 0.4f, 1.0f);
         public static Vector4 DangerRed { get; private set; } = new(0.8f, 0.2f, 0.3f, 1.0f);
         public static Vector4 DangerRedHover { get; private set; } = new(0.9f, 0.3f, 0.4f, 1.0f);
-        public static Vector4 WarningYellow { get; private set; } = new(1.0f, 0.8f, 0.2f, 1.0f);
+        public static Vector4 WarningYellow { get; private set; }
+        public static Vector4 WarningYellowHover { get; private set; } = new(1.0f, 0.8f, 0.2f, 1.0f);
         public static Vector4 TextPrimary { get; private set; } = new(0.95f, 0.95f, 0.98f, 1.0f);
         public static Vector4 TextSecondary { get; private set; } = new(0.7f, 0.7f, 0.8f, 1.0f);
         
@@ -114,6 +116,7 @@ public class MainWindow : Window, IDisposable
             DangerRed = new(0.8f, 0.2f, 0.3f, 1.0f);
             DangerRedHover = new(0.9f, 0.3f, 0.4f, 1.0f);
             WarningYellow = new(1.0f, 0.8f, 0.2f, 1.0f);
+            WarningYellowHover = new(1.0f, 0.9f, 0.3f, 1.0f);
             TextPrimary = new(0.95f, 0.95f, 0.98f, 1.0f);
             TextSecondary = new(0.7f, 0.7f, 0.8f, 1.0f);
         }
@@ -171,8 +174,17 @@ public class MainWindow : Window, IDisposable
 
     private readonly Plugin plugin;
     private readonly Configuration configuration;
+    
     private bool showWinnerSelectionPopup = false;
     private string selectedWinnerToPass = null;
+    
+    private string newProfileName = "";
+    private string selectedProfile = "";
+    private bool showImportDialog = false;
+    private string importProfileName = "";
+    private string importData = "";
+    private string importFeedback = "";
+    private bool importSuccess = false;
 
     public MainWindow(Plugin plugin, Configuration configuration)
         : base("Truth or Dare##MainWindow")
@@ -202,7 +214,8 @@ public class MainWindow : Window, IDisposable
             Icon = FontAwesomeIcon.Stop,
             Click = (msg) =>
             {
-                plugin.StopGame();
+                if (plugin.IsUserAuthorized())
+                    plugin.StopGame();
             },
             IconOffset = new Vector2(2, 1),
             ShowTooltip = () =>
@@ -217,7 +230,8 @@ public class MainWindow : Window, IDisposable
             Icon = FontAwesomeIcon.Play,
             Click = (msg) =>
             {
-                plugin.StartGame();
+                if (plugin.IsUserAuthorized())
+                    plugin.StartGame();
             },
             IconOffset = new Vector2(2, 1),
             ShowTooltip = () =>
@@ -238,6 +252,21 @@ public class MainWindow : Window, IDisposable
             ShowTooltip = () =>
             {
                 ImGui.SetTooltip("Copy Results to Clipboard");
+            }
+        });
+
+        // Logout button
+        this.TitleBarButtons.Add(new TitleBarButton
+        {
+            Icon = FontAwesomeIcon.SignOutAlt,
+            Click = (msg) =>
+            {
+                plugin.Logout();
+            },
+            IconOffset = new Vector2(2, 1),
+            ShowTooltip = () =>
+            {
+                ImGui.SetTooltip("Logout");
             }
         });
 
@@ -310,18 +339,18 @@ public class MainWindow : Window, IDisposable
     
     private void DrawSupportButtons()
     {
+        var availableWidth = ImGui.GetContentRegionAvail().X;
         var discordButtonSize = GetIconTextButtonSize(FontAwesomeIcon.Comments, "Discord");
         var kofiButtonSize = GetIconTextButtonSize(FontAwesomeIcon.Coffee, "Tip Jar");
         var totalButtonWidth = discordButtonSize.X + kofiButtonSize.X + ImGui.GetStyle().ItemSpacing.X;
-        var windowWidth = ImGui.GetWindowContentRegionMax().X - ImGui.GetWindowContentRegionMin().X;
         
         // Center the buttons
-        ImGui.SetCursorPosX((windowWidth - totalButtonWidth) / 2 + ImGui.GetWindowContentRegionMin().X);
+        ImGui.SetCursorPosX((availableWidth - totalButtonWidth) / 2);
         
         // Discord button
         if (IconTextButton(FontAwesomeIcon.Comments, "Discord"))
         {
-            Util.OpenLink("https://discord.gg/DCtCC5wS");
+            Util.OpenLink("https://discord.gg/6uEs2gpUbT");
         }
         ImGui.SameLine();
         
@@ -334,7 +363,9 @@ public class MainWindow : Window, IDisposable
     
     private Vector2 GetIconTextButtonSize(FontAwesomeIcon icon, string text)
     {
+        ImGui.PushFont(UiBuilder.IconFont);
         var iconSize = ImGui.CalcTextSize(icon.ToIconString());
+        ImGui.PopFont();
         var textSize = ImGui.CalcTextSize(text);
         var spacing = ImGui.GetStyle().ItemSpacing.X;
         return new Vector2(iconSize.X + textSize.X + spacing + ImGui.GetStyle().FramePadding.X * 2, Math.Max(iconSize.Y, textSize.Y) + ImGui.GetStyle().FramePadding.Y * 2);
@@ -347,15 +378,16 @@ public class MainWindow : Window, IDisposable
         var pos = ImGui.GetCursorScreenPos();
         var clicked = ImGui.Button($"##{text}", buttonSize);
         
-        // Draw icon
+        // Calculate icon dimensions with icon font
         ImGui.PushFont(UiBuilder.IconFont);
-        var iconPos = new Vector2(pos.X + ImGui.GetStyle().FramePadding.X, pos.Y + (buttonSize.Y - ImGui.CalcTextSize(icon.ToIconString()).Y) / 2);
-        drawList.AddText(iconPos, ImGui.GetColorU32(ImGuiCol.Text), icon.ToIconString());
+        var iconString = icon.ToIconString();
+        var iconSize = ImGui.CalcTextSize(iconString);
+        var iconPos = new Vector2(pos.X + ImGui.GetStyle().FramePadding.X, pos.Y + (buttonSize.Y - iconSize.Y) / 2);
+        drawList.AddText(iconPos, ImGui.GetColorU32(ImGuiCol.Text), iconString);
         ImGui.PopFont();
         
         // Draw text
-        var iconWidth = ImGui.CalcTextSize(icon.ToIconString()).X;
-        var textPos = new Vector2(pos.X + ImGui.GetStyle().FramePadding.X + iconWidth + ImGui.GetStyle().ItemSpacing.X, pos.Y + (buttonSize.Y - ImGui.CalcTextSize(text).Y) / 2);
+        var textPos = new Vector2(pos.X + ImGui.GetStyle().FramePadding.X + iconSize.X + ImGui.GetStyle().ItemSpacing.X, pos.Y + (buttonSize.Y - ImGui.CalcTextSize(text).Y) / 2);
         drawList.AddText(textPos, ImGui.GetColorU32(ImGuiCol.Text), text);
         
         return clicked;
@@ -438,6 +470,13 @@ public class MainWindow : Window, IDisposable
 
         try
         {
+            // Authentication check - show login screen if not authenticated
+            if (!plugin.IsUserAuthorized())
+            {
+                DrawAuthenticationScreen();
+                return;
+            }
+
             var gameRolls = plugin.GetCurrentRolls();
 
             // Discord and Ko-Fi buttons
@@ -549,10 +588,66 @@ public class MainWindow : Window, IDisposable
         ImGui.EndChild();
         ModernStyle.PopCardStyle();
 
-        // Copy Results button positioned next to Game Status - always visible
+        ImGui.Spacing();
+        ModernStyle.ApplyCardStyle();
+        if (ImGui.BeginChild("StatisticsCard", new Vector2(0, 100), true, ImGuiWindowFlags.NoScrollbar))
+        {
+            ImGui.PushFont(UiBuilder.IconFont);
+            ImGui.TextColored(ModernStyle.AccentPurple, FontAwesomeIcon.ChartBar.ToIconString());
+            ImGui.PopFont();
+            ImGui.SameLine();
+            ImGui.TextColored(ModernStyle.TextPrimary, "Statistics");
+            ImGui.Separator();
+            ImGui.Spacing();
+
+            var availableWidth = ImGui.GetContentRegionAvail().X;
+            var labelWidth = availableWidth * 0.6f;
+            ImGui.PushFont(UiBuilder.IconFont);
+            ImGui.TextColored(ModernStyle.AccentPurple, FontAwesomeIcon.Trophy.ToIconString());
+            ImGui.PopFont();
+            ImGui.SameLine();
+            ImGui.Text("All Time Rounds:");
+            ImGui.SameLine(labelWidth);
+            ImGui.TextColored(ModernStyle.SuccessGreen, configuration.Statistics.TotalRounds.ToString());
+            ImGui.PushFont(UiBuilder.IconFont);
+            ImGui.TextColored(ModernStyle.AccentPurple, FontAwesomeIcon.Clock.ToIconString());
+            ImGui.PopFont();
+            ImGui.SameLine();
+            ImGui.Text("This Session:");
+            ImGui.SameLine(labelWidth);
+            ImGui.TextColored(ModernStyle.WarningYellow, configuration.Statistics.SessionRounds.ToString());
+            ImGui.SameLine();
+            ImGui.SetCursorPosX(availableWidth - 65 + ImGui.GetWindowContentRegionMin().X);
+            
+            bool canReset = configuration.Statistics.SessionRounds > 0;
+            if (!canReset) ImGui.BeginDisabled();
+            
+            ModernStyle.ApplyModernButtonStyle(ModernStyle.DangerRed, ModernStyle.DangerRedHover);
+            
+            ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, new Vector2(12, 7));
+            
+            if (ImGui.Button("Reset", new Vector2(60, 30)))
+            {
+                plugin.ResetSessionStatistics();
+            }
+            ImGui.PopStyleVar();
+            ModernStyle.PopModernButtonStyle();
+            
+            if (!canReset) ImGui.EndDisabled();
+            
+            if (ImGui.IsItemHovered())
+            {
+                if (canReset)
+                    ImGui.SetTooltip("Reset session round count to 0");
+                else
+                    ImGui.SetTooltip("No session rounds to reset");
+            }
+        }
+        ImGui.EndChild();
+        ModernStyle.PopCardStyle();
+
         ImGui.Spacing();
 
-        // Generate results for copying
         string winnerForCopy = "";
         int winnerRollForCopy = 0;
         bool hasResults = false;
@@ -1062,6 +1157,28 @@ public class MainWindow : Window, IDisposable
             }
             if (ImGui.IsItemHovered())
                 ImGui.SetTooltip("How many winners to select each round (1-2)");
+            
+            ImGui.AlignTextToFramePadding();
+            ImGui.Text("Winner Selection Mode:");
+            ImGui.SameLine(ImGui.GetWindowWidth() - 200);
+            var currentMode = configuration.WinnerMode;
+            ImGui.SetNextItemWidth(180);
+            if (ImGui.BeginCombo("##WinnerMode", GetWinnerModeName(currentMode)))
+            {
+                foreach (var mode in Enum.GetValues<WinnerSelectionMode>())
+                {
+                    if (ImGui.Selectable(GetWinnerModeName(mode), currentMode == mode))
+                    {
+                        configuration.WinnerMode = mode;
+                        configuration.Save();
+                    }
+                    if (ImGui.IsItemHovered())
+                        ImGui.SetTooltip(GetWinnerModeDescription(mode));
+                }
+                ImGui.EndCombo();
+            }
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip(GetWinnerModeDescription(currentMode));
         }
         ImGui.EndChild();
         ModernStyle.PopCardStyle();
@@ -1338,7 +1455,7 @@ public class MainWindow : Window, IDisposable
         
         // Announcement Templates (expandable section)
         ModernStyle.ApplyCardStyle();
-        if (ImGui.BeginChild("AnnouncementCard", new Vector2(0, 300), true, ImGuiWindowFlags.None))
+        if (ImGui.BeginChild("AnnouncementCard", new Vector2(0, 150), true, ImGuiWindowFlags.None))
         {
             ImGui.PushFont(UiBuilder.IconFont);
             ImGui.TextColored(ModernStyle.AccentPurple, FontAwesomeIcon.Bullhorn.ToIconString());
@@ -1380,6 +1497,10 @@ public class MainWindow : Window, IDisposable
                     "Format for multiple winners (traditional mode)");
                 configuration.Announcements.WinnerSpecificResult = DrawAnnouncementInput("Winner-Specific", configuration.Announcements.WinnerSpecificResult, 
                     "Format for individual winner announcements");
+                configuration.Announcements.PassedWinnerResult = DrawAnnouncementInput("Passed Winner", configuration.Announcements.PassedWinnerResult, 
+                    "Format when a winner passes to the next player");
+                configuration.Announcements.JackpotWinnerResult = DrawAnnouncementInput("Jackpot Winner", configuration.Announcements.JackpotWinnerResult, 
+                    "Format for jackpot winner announcements (non-passable)");
             }
             
             if (ImGui.CollapsingHeader("Available Placeholders"))
@@ -1403,6 +1524,11 @@ public class MainWindow : Window, IDisposable
         }
         ImGui.EndChild();
         ModernStyle.PopCardStyle();
+        
+        ImGui.Spacing();
+        
+        // Profile Management
+        DrawProfileManagementSection();
     }
     
     private string DrawAnnouncementInput(string label, string value, string tooltip)
@@ -1419,6 +1545,340 @@ public class MainWindow : Window, IDisposable
         return value;
     }
 
+    private void DrawProfileManagementSection()
+    {
+        ModernStyle.ApplyCardStyle();
+        var cardSize = new Vector2(ImGui.GetContentRegionAvail().X, 200);
+        if (ImGui.BeginChild("ProfileCard", cardSize, true))
+        {
+            ImGui.Spacing();
+            ImGui.PushFont(UiBuilder.IconFont);
+            ImGui.TextColored(ModernStyle.AccentPurple, FontAwesomeIcon.User.ToIconString());
+            ImGui.PopFont();
+            ImGui.SameLine();
+            ImGui.TextColored(ModernStyle.AccentPurple, "Profile Management");
+            ImGui.Spacing();
+
+            ImGui.Text("Current Profile:");
+            ImGui.SameLine();
+            ImGui.TextColored(ModernStyle.SuccessGreen, string.IsNullOrEmpty(configuration.CurrentProfileName) ? "Default" : configuration.CurrentProfileName);
+            ImGui.Spacing();
+
+            var availableProfiles = configuration.GetProfileNames();
+            
+            // Profile Selection
+            ImGui.SetNextItemWidth(200);
+            if (ImGui.BeginCombo("##ProfileSelect", string.IsNullOrEmpty(selectedProfile) ? "Select Profile..." : selectedProfile))
+            {
+                foreach (var profile in availableProfiles)
+                {
+                    bool isSelected = selectedProfile == profile;
+                    if (ImGui.Selectable(profile, isSelected))
+                    {
+                        selectedProfile = profile;
+                    }
+                    if (isSelected)
+                        ImGui.SetItemDefaultFocus();
+                }
+                ImGui.EndCombo();
+            }
+
+            ImGui.SameLine();
+            if (ImGui.Button("Load", new Vector2(60, 0)) && !string.IsNullOrEmpty(selectedProfile))
+            {
+                if (configuration.LoadProfile(selectedProfile))
+                {
+                    importFeedback = $"Loaded profile '{selectedProfile}'";
+                    importSuccess = true;
+                    selectedProfile = "";
+                }
+                else
+                {
+                    importFeedback = "Failed to load profile";
+                    importSuccess = false;
+                }
+            }
+
+            ImGui.SameLine();
+            if (ImGui.Button("Delete", new Vector2(60, 0)) && !string.IsNullOrEmpty(selectedProfile))
+            {
+                if (configuration.DeleteProfile(selectedProfile))
+                {
+                    importFeedback = $"Deleted profile '{selectedProfile}'";
+                    importSuccess = true;
+                    selectedProfile = "";
+                }
+                else
+                {
+                    importFeedback = "Failed to delete profile";
+                    importSuccess = false;
+                }
+            }
+
+            // Save New Profile
+            ImGui.SetNextItemWidth(200);
+            ImGui.InputTextWithHint("##NewProfileName", "Enter profile name...", ref newProfileName, 50);
+            
+            ImGui.SameLine();
+            if (ImGui.Button("Save Current", new Vector2(90, 0)) && !string.IsNullOrWhiteSpace(newProfileName))
+            {
+                if (configuration.SaveCurrentAsProfile(newProfileName.Trim()))
+                {
+                    importFeedback = $"Saved profile '{newProfileName.Trim()}'";
+                    importSuccess = true;
+                    newProfileName = "";
+                }
+                else
+                {
+                    importFeedback = "Failed to save profile";
+                    importSuccess = false;
+                }
+            }
+
+            // Export/Import Section
+            ImGui.Spacing();
+            ImGui.Separator();
+            ImGui.Spacing();
+            
+            if (ImGui.Button("Export Profile", new Vector2(110, 0)))
+            {
+                if (!string.IsNullOrEmpty(selectedProfile))
+                {
+                    try
+                    {
+                        var profileData = configuration.ExportProfileToString(selectedProfile);
+                        ImGui.SetClipboardText(profileData);
+                        importFeedback = $"Profile '{selectedProfile}' copied to clipboard!";
+                        importSuccess = true;
+                    }
+                    catch (Exception ex)
+                    {
+                        importFeedback = $"Export failed: {ex.Message}";
+                        importSuccess = false;
+                    }
+                }
+            }
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Copy selected profile to clipboard as JSON");
+            
+            ImGui.SameLine();
+            if (ImGui.Button("Export All", new Vector2(85, 0)))
+            {
+                try
+                {
+                    var allProfilesData = configuration.ExportAllProfilesToString();
+                    ImGui.SetClipboardText(allProfilesData);
+                    importFeedback = "All profiles copied to clipboard!";
+                    importSuccess = true;
+                }
+                catch (Exception ex)
+                {
+                    importFeedback = $"Export failed: {ex.Message}";
+                    importSuccess = false;
+                }
+            }
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Copy all profiles to clipboard as JSON");
+            
+            ImGui.SameLine();
+            if (ImGui.Button("Import", new Vector2(65, 0)))
+            {
+                var clipboardData = ImGui.GetClipboardText();
+                if (!string.IsNullOrWhiteSpace(clipboardData))
+                {
+                    importData = clipboardData;
+                    importProfileName = "";
+                    importFeedback = "";
+                    showImportDialog = true;
+                }
+                else
+                {
+                    importFeedback = "Clipboard is empty or contains no text";
+                    importSuccess = false;
+                }
+            }
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Import profile(s) from clipboard JSON data");
+        }
+        ImGui.EndChild();
+        ModernStyle.PopCardStyle();
+        
+        // Show import feedback if there's any
+        if (!string.IsNullOrEmpty(importFeedback))
+        {
+            ImGui.Spacing();
+            var feedbackColor = importSuccess ? ModernStyle.SuccessGreen : ModernStyle.DangerRed;
+            ImGui.TextColored(feedbackColor, importFeedback);
+        }
+        
+        DrawImportDialog();
+    }
+
+    private void DrawImportDialog()
+    {
+        if (!showImportDialog) return;
+
+        ImGui.SetNextWindowSize(new Vector2(500, 300), ImGuiCond.FirstUseEver);
+        if (ImGui.Begin("Import Profile", ref showImportDialog))
+        {
+            ImGui.TextColored(ModernStyle.AccentPurple, "Import Profile from Clipboard");
+            ImGui.Separator();
+            ImGui.Spacing();
+            
+            // Analyze the clipboard data
+            bool isMultipleProfiles = false;
+            bool isValidJson = false;
+            string profilePreview = "";
+            
+            try
+            {
+                var jsonOptions = new System.Text.Json.JsonSerializerOptions
+                {
+                    PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase
+                };
+                
+                if (importData.TrimStart().StartsWith("["))
+                {
+                    // Try to parse as multiple profiles
+                    var profiles = System.Text.Json.JsonSerializer.Deserialize<List<GameProfile>>(importData, jsonOptions);
+                    if (profiles != null && profiles.Count > 0)
+                    {
+                        isMultipleProfiles = true;
+                        isValidJson = true;
+                        profilePreview = $"Found {profiles.Count} profiles: {string.Join(", ", profiles.Select(p => p.Name))}";
+                    }
+                }
+                else
+                {
+                    // Try to parse as single profile
+                    var profile = System.Text.Json.JsonSerializer.Deserialize<GameProfile>(importData, jsonOptions);
+                    if (profile != null && !string.IsNullOrEmpty(profile.Name))
+                    {
+                        isValidJson = true;
+                        profilePreview = $"Profile: {profile.Name}";
+                        importProfileName = profile.Name; // Default to original name
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                isValidJson = false;
+                profilePreview = $"JSON parsing error: {ex.Message}";
+            }
+            
+            if (isValidJson)
+            {
+                ImGui.PushFont(UiBuilder.IconFont);
+                ImGui.TextColored(ModernStyle.SuccessGreen, FontAwesomeIcon.Check.ToIconString());
+                ImGui.PopFont();
+                ImGui.SameLine();
+                ImGui.TextColored(ModernStyle.SuccessGreen, "Valid profile data detected");
+                ImGui.Text(profilePreview);
+                ImGui.Spacing();
+                
+                if (isMultipleProfiles)
+                {
+                    ImGui.TextColored(ModernStyle.TextSecondary, "Multiple profiles will be imported. Existing profiles with the same names will be overwritten.");
+                    ImGui.Spacing();
+                    
+                    if (ImGui.Button("Import All Profiles", new Vector2(150, 30)))
+                    {
+                        try
+                        {
+                            if (configuration.ImportAllProfilesFromString(importData))
+                            {
+                                importFeedback = "Successfully imported all profiles!";
+                                importSuccess = true;
+                                showImportDialog = false;
+                            }
+                            else
+                            {
+                                importFeedback = "Failed to import profiles";
+                                importSuccess = false;
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            importFeedback = $"Import error: {ex.Message}";
+                            importSuccess = false;
+                        }
+                    }
+                }
+                else
+                {
+                    ImGui.Text("Profile Name:");
+                    ImGui.SetNextItemWidth(300);
+                    ImGui.InputTextWithHint("##ImportProfileName", "Enter name for this profile...", ref importProfileName, 50);
+                    
+                    if (string.IsNullOrWhiteSpace(importProfileName))
+                    {
+                        ImGui.TextColored(ModernStyle.WarningYellow, "Please enter a profile name");
+                    }
+                    else
+                    {
+                        // Check if profile already exists
+                        var existingProfiles = configuration.GetProfileNames();
+                        bool profileExists = existingProfiles.Any(p => p.Equals(importProfileName.Trim(), StringComparison.OrdinalIgnoreCase));
+                        
+                        if (profileExists)
+                        {
+                            ImGui.PushFont(UiBuilder.IconFont);
+                            ImGui.TextColored(ModernStyle.WarningYellow, FontAwesomeIcon.ExclamationTriangle.ToIconString());
+                            ImGui.PopFont();
+                            ImGui.SameLine();
+                            ImGui.TextColored(ModernStyle.WarningYellow, "This will overwrite the existing profile with the same name");
+                        }
+                        
+                        ImGui.Spacing();
+                        if (ImGui.Button("Import Profile", new Vector2(120, 30)))
+                        {
+                            try
+                            {
+                                if (configuration.ImportProfileFromString(importData, importProfileName.Trim()))
+                                {
+                                    importFeedback = $"Successfully imported profile '{importProfileName.Trim()}'!";
+                                    importSuccess = true;
+                                    showImportDialog = false;
+                                }
+                                else
+                                {
+                                    importFeedback = "Failed to import profile";
+                                    importSuccess = false;
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                importFeedback = $"Import error: {ex.Message}";
+                                importSuccess = false;
+                            }
+                        }
+                    }
+                }
+            }
+            else
+            {
+                ImGui.PushFont(UiBuilder.IconFont);
+                ImGui.TextColored(ModernStyle.DangerRed, FontAwesomeIcon.Times.ToIconString());
+                ImGui.PopFont();
+                ImGui.SameLine();
+                ImGui.TextColored(ModernStyle.DangerRed, "Invalid profile data");
+                ImGui.TextColored(ModernStyle.TextSecondary, profilePreview);
+                ImGui.Spacing();
+                ImGui.TextWrapped("The clipboard does not contain valid profile JSON data. Make sure you copied the complete profile data from an export operation.");
+            }
+            
+            ImGui.Spacing();
+            ImGui.Separator();
+            ImGui.Spacing();
+            
+            if (ImGui.Button("Cancel", new Vector2(80, 25)))
+            {
+                showImportDialog = false;
+            }
+        }
+        ImGui.End();
+    }
+
     private void DrawAboutTab()
     {
         // Hero section
@@ -1430,8 +1890,8 @@ public class MainWindow : Window, IDisposable
         ImGui.SetCursorPosX((windowWidth - titleSize.X) / 2);
         ImGui.TextColored(ModernStyle.AccentPurple, "Truth or Dare for FFXIV");
         
-        ImGui.SetCursorPosX((windowWidth - ImGui.CalcTextSize($"Version 2.3.0.1 by Kirin Avenleigh").X) / 2);
-        ImGui.TextColored(ModernStyle.TextSecondary, "Version 2.3.0.1 by Kirin Avenleigh");
+        ImGui.SetCursorPosX((windowWidth - ImGui.CalcTextSize($"Version 2.3.6.0 by Kirin Avenleigh").X) / 2);
+        ImGui.TextColored(ModernStyle.TextSecondary, "Version 2.3.6.0 by Kirin Avenleigh");
         
         ImGui.Spacing();
         ImGui.TextWrapped("Automated Truth or Dare game management with roll tracking, winner determination, and customizable announcements.");
@@ -1502,4 +1962,175 @@ public class MainWindow : Window, IDisposable
         ImGui.EndChild();
         ModernStyle.PopCardStyle();
     }
+    
+    private string GetWinnerModeName(WinnerSelectionMode mode)
+    {
+        return mode switch
+        {
+            WinnerSelectionMode.TopHighest => "Top Highest",
+            WinnerSelectionMode.HighestAndLowest => "Highest & Lowest",
+            WinnerSelectionMode.BottomLowest => "Bottom Lowest",
+            WinnerSelectionMode.Random => "Random Selection",
+            WinnerSelectionMode.Middle => "Middle Rolls",
+            _ => mode.ToString()
+        };
+    }
+    
+    private string GetWinnerModeDescription(WinnerSelectionMode mode)
+    {
+        return mode switch
+        {
+            WinnerSelectionMode.TopHighest => "Select the N highest rolls (e.g., 98, 95 for 2 winners)",
+            WinnerSelectionMode.HighestAndLowest => "Select highest and lowest rolls (e.g., 98 and 12)",
+            WinnerSelectionMode.BottomLowest => "Select the N lowest rolls (e.g., 12, 15 for 2 winners)",
+            WinnerSelectionMode.Random => "Randomly select N winners from all participants",
+            WinnerSelectionMode.Middle => "Select the middle roll value(s) from all participants",
+            _ => "Unknown selection mode"
+        };
+    }
+    
+    private void DrawAuthenticationScreen()
+    {
+        var availableWidth = ImGui.GetContentRegionAvail().X;
+        
+        ImGui.Spacing();
+        ImGui.Spacing();
+        
+        // Title - properly centered
+        var titleText = "Truth or Dare";
+        var titleSize = ImGui.CalcTextSize(titleText);
+        ImGui.SetCursorPosX((availableWidth - titleSize.X) * 0.5f);
+        ImGui.PushStyleColor(ImGuiCol.Text, ModernStyle.AccentPurple);
+        ImGui.Text(titleText);
+        ImGui.PopStyleColor();
+        
+        ImGui.Spacing();
+        ImGui.Spacing();
+        
+        // Authentication announcement box - adjusted to fit all content without scrolling
+        ModernStyle.ApplyCardStyle();
+        ImGui.BeginChild("AuthAnnouncement", new Vector2(availableWidth - 20, 350), true, ImGuiWindowFlags.NoScrollbar);
+        
+        // Enticing header
+        var enticingTitle = "Wanna host Truth or Dare with ease?";
+        var enticingTitleSize = ImGui.CalcTextSize(enticingTitle);
+        ImGui.SetCursorPosX((ImGui.GetContentRegionAvail().X - enticingTitleSize.X) * 0.5f);
+        ImGui.PushStyleColor(ImGuiCol.Text, ModernStyle.AccentPurple);
+        ImGui.Text(enticingTitle);
+        ImGui.PopStyleColor();
+        
+        ImGui.Spacing();
+        
+        // Location info
+        var locationText = "Visit: Malboro - Mist Ward 29, Plot 12";
+        var locationSize = ImGui.CalcTextSize(locationText);
+        ImGui.SetCursorPosX((ImGui.GetContentRegionAvail().X - locationSize.X) * 0.5f);
+        ImGui.TextColored(ModernStyle.TextPrimary, locationText);
+        
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.Spacing();
+        
+        // Pricing info - left aligned for readability
+        ImGui.TextColored(ModernStyle.SuccessGreen, "Individual License: 2,000,000 gil");
+        ImGui.TextColored(ModernStyle.TextSecondary, "  (Purchase any LEFT side gear)");
+        ImGui.TextColored(ModernStyle.TextSecondary, "  Single user access");
+        
+        ImGui.Spacing();
+        
+        ImGui.TextColored(ModernStyle.WarningYellow, "Venue License: 10,000,000 gil");
+        ImGui.TextColored(ModernStyle.TextSecondary, "  (Purchase any RIGHT side gear)");
+        ImGui.TextColored(ModernStyle.TextSecondary, "  Includes 5 additional users (6 total)");
+        
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.Spacing();
+        
+        // Activation instructions
+        ImGui.PushFont(UiBuilder.IconFont);
+        ImGui.TextColored(ModernStyle.AccentPurple, FontAwesomeIcon.InfoCircle.ToIconString());
+        ImGui.PopFont();
+        ImGui.SameLine();
+        ImGui.TextColored(ModernStyle.AccentPurple, "How to Activate:");
+        
+        ImGui.TextColored(ModernStyle.TextPrimary, "1. Purchase from Mannequin <Caramel-mocha-latte>");
+        ImGui.TextColored(ModernStyle.TextPrimary, "2. Sign the message book OR DM on Discord");
+        ImGui.TextColored(ModernStyle.TextSecondary, "   (Include your character@world name)");
+        ImGui.TextColored(ModernStyle.TextPrimary, "3. Your license will be activated shortly");
+        
+        ImGui.Spacing();
+        
+        // Discord button - using the same style as the main window
+        var discordButtonSize = GetIconTextButtonSize(FontAwesomeIcon.Comments, "Questions? Join Discord");
+        ImGui.SetCursorPosX((ImGui.GetContentRegionAvail().X - discordButtonSize.X) * 0.5f);
+        if (IconTextButton(FontAwesomeIcon.Comments, "Questions? Join Discord"))
+        {
+            Util.OpenLink("https://discord.gg/6uEs2gpUbT");
+        }
+        
+        ImGui.EndChild();
+        ModernStyle.PopCardStyle();
+        
+        ImGui.Spacing();
+        ImGui.Spacing();
+        
+        // Current character info - properly centered
+        var currentUser = plugin.GetCurrentUserIdentifier();
+        if (!string.IsNullOrEmpty(currentUser))
+        {
+            var charText = $"Current Character: {currentUser}";
+            var charSize = ImGui.CalcTextSize(charText);
+            ImGui.SetCursorPosX((availableWidth - charSize.X) * 0.5f);
+            ImGui.Text(charText);
+        }
+        else
+        {
+            var errorText = "No character information available";
+            var errorSize = ImGui.CalcTextSize(errorText);
+            ImGui.SetCursorPosX((availableWidth - errorSize.X) * 0.5f);
+            ImGui.TextColored(ModernStyle.WarningYellow, errorText);
+        }
+        
+        ImGui.Spacing();
+        ImGui.Spacing();
+        
+        // Login button - properly centered
+        var buttonSize = new Vector2(120, 40);
+        ImGui.SetCursorPosX((availableWidth - buttonSize.X) * 0.5f);
+        ModernStyle.ApplyModernButtonStyle(ModernStyle.SuccessGreen, ModernStyle.SuccessGreenHover);
+        if (ImGui.Button("Log In", buttonSize))
+        {
+            bool success = plugin.TryAuthenticate();
+            if (!success)
+            {
+                // Show error message
+                ImGui.OpenPopup("Authentication Failed");
+            }
+        }
+        ModernStyle.PopModernButtonStyle();
+        
+        // Authentication failed popup
+        if (ImGui.BeginPopupModal("Authentication Failed", ref showAuthFailedPopup, ImGuiWindowFlags.AlwaysAutoResize))
+        {
+            ImGui.Text("Authentication failed!");
+            ImGui.Text("You are not authorized to use this plugin.");
+            ImGui.Spacing();
+            if (!string.IsNullOrEmpty(currentUser))
+            {
+                ImGui.Text($"Your character: {currentUser}");
+                ImGui.Text("Contact the plugin owner to request access.");
+            }
+            
+            ImGui.Spacing();
+            if (ImGui.Button("OK", new Vector2(100, 0)))
+            {
+                ImGui.CloseCurrentPopup();
+            }
+            ImGui.EndPopup();
+        }
+        
+    }
+
+    
+    private bool showAuthFailedPopup = false;
 }
