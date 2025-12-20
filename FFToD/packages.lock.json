@@ -1,38 +1,38 @@
 {
   "version": 1,
   "dependencies": {
-    "net9.0-windows7.0": {
+    "net10.0-windows7.0": {
       "DalamudPackager": {
         "type": "Direct",
-        "requested": "[13.0.0, )",
-        "resolved": "13.0.0",
-        "contentHash": "Mb3cUDSK/vDPQ8gQIeuCw03EMYrej1B4J44a1AvIJ9C759p9XeqdU9Hg4WgOmlnlPe0G7ILTD32PKSUpkQNa8w=="
+        "requested": "[14.0.1, )",
+        "resolved": "14.0.1",
+        "contentHash": "y0WWyUE6dhpGdolK3iKgwys05/nZaVf4ZPtIjpLhJBZvHxkkiE23zYRo7K7uqAgoK/QvK5cqF6l3VG5AbgC6KA=="
       },
       "DotNet.ReproducibleBuilds": {
         "type": "Direct",
-        "requested": "[1.2.25, )",
-        "resolved": "1.2.25",
-        "contentHash": "xCXiw7BCxHJ8pF6wPepRUddlh2dlQlbr81gXA72hdk4FLHkKXas7EH/n+fk5UCA/YfMqG1Z6XaPiUjDbUNBUzg=="
+        "requested": "[1.2.39, )",
+        "resolved": "1.2.39",
+        "contentHash": "fcFN01tDTIQqDuTwr1jUQK/geofiwjG5DycJQOnC72i1SsLAk1ELe+apBOuZ11UMQG8YKFZG1FgvjZPbqHyatg=="
       },
       "ECommons": {
         "type": "Direct",
         "requested": "[*, )",
-        "resolved": "3.0.1.17",
-        "contentHash": "kveqxdys4A7tt8EkzQmN4XPXe9Rz/k+c/+6U2yyk5hWAeBynTFo0dGkWeFfp2I+mnfUviJrvhEAee+t+jhFVPg=="
+        "resolved": "3.1.0.5",
+        "contentHash": "oEpz7wIB4GPEWcYsNKqf3Sny+K4agdFlSo8YKEu6QdEFuPEH6kzwL7UKCKxj327lailQ927fIPPxCFHSAOXIMA=="
       },
       "Hexa.NET.ImGui": {
         "type": "Direct",
-        "requested": "[2.1.4, )",
-        "resolved": "2.1.4",
-        "contentHash": "EpamPNEWEfKEOj5iOmwRBuW4xen24ZSECWgSYkRkKjfvnFbea5r0idR9peYGXpicFVduPRyG1rV8JM9rX5fdpA==",
+        "requested": "[2.2.9, )",
+        "resolved": "2.2.9",
+        "contentHash": "WFnhZiBZ6UStKqVt43d2hhGCBaJ/TfLRVExnqAO+R3TEbfTQfVjWhcDRUb7n4SvFW7AP9JR8TpCutQZmV62D2A==",
         "dependencies": {
-          "HexaGen.Runtime": "1.1.9"
+          "HexaGen.Runtime": "1.1.21"
         }
       },
       "HexaGen.Runtime": {
         "type": "Transitive",
-        "resolved": "1.1.9",
-        "contentHash": "C35/kzqMUlgHOlwld5w7TzoEedMwrOvzK0oCks4D3ZZf24WKV4f0hTU5pbXJyAKpdcW1ib0BAp4wmEXemGMCaw=="
+        "resolved": "1.1.21",
+        "contentHash": "fxSBIroVyuU1CQUSKsE3IZNOW8FlI58zuU1kIG5ZvDH0jtQq5yTPEvPMoNyMB5PrhzYH/taTMqd85VtxcZPD8g=="
       }
     }
   }
