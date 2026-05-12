@@ -1,9 +1,9 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<Project Sdk="Dalamud.NET.Sdk/14.0.1">
+<Project Sdk="Dalamud.NET.Sdk/15.0.0">
     <PropertyGroup>
         <AssemblyName>FFToD</AssemblyName>
         <!-- Single source of truth for version - change ONLY this line to update everywhere -->
-        <Version>2.4.6.0</Version>
+        <Version>2.4.8.0</Version>
         <AssemblyVersion>$(Version)</AssemblyVersion>
         <FileVersion>$(Version)</FileVersion>
         <Authors>Kirin Avenleigh</Authors>
@@ -11,7 +11,7 @@
         <PackageProjectUrl>https://github.com/kirin-xiv/FFToD-Release</PackageProjectUrl>
         <PackageLicenseExpression>MIT</PackageLicenseExpression>
         <IsPackable>false</IsPackable>
-        <DalamudApiLevel>14</DalamudApiLevel>
+        <DalamudApiLevel>15</DalamudApiLevel>
         <TargetFramework>net10.0-windows7.0</TargetFramework>
     </PropertyGroup>
 
@@ -22,7 +22,7 @@
     </ItemGroup>
     <!-- Package reference for DalamudPackager -->
     <ItemGroup>
-        <PackageReference Update="DalamudPackager" Version="14.0.1" />
+        <PackageReference Update="DalamudPackager" Version="15.0.0" />
 
         <PackageReference Update="DotNet.ReproducibleBuilds" Version="1.2.39" />
     </ItemGroup>

@@ -1,9 +1,13 @@
+using Dalamud.Game.Chat;
 using Dalamud.Game.Command;
+using Dalamud.Game.Text;
+using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using ECommons;
 using ECommons.Automation;
+using ECommons.DalamudServices;
 using FFToD.Services;
 using System;
 using System.Collections.Generic;
@@ -189,9 +193,9 @@ public sealed class Plugin : IDalamudPlugin
             chatGui.Print($"[ToD] Last winner: {configuration.LastWinner}");
     }
 
-    private void OnChatMessage(Dalamud.Game.Text.XivChatType type, int timestamp, ref Dalamud.Game.Text.SeStringHandling.SeString sender, ref Dalamud.Game.Text.SeStringHandling.SeString message, ref bool isHandled)
+    private void OnChatMessage(IHandleableChatMessage message)
     {
-        var messageText = message.TextValue;
+        var messageText = message.Message.TextValue;
 
         if (!isGameActive || !isRollingPhase)
             return;
@@ -245,9 +249,9 @@ public sealed class Plugin : IDalamudPlugin
             {
                 normalizedName = configuration.LocalPlayerName;
             }
-            else if (clientState.LocalPlayer != null)
+            else if (Svc.Objects?.LocalPlayer != null)
             {
-                normalizedName = clientState.LocalPlayer.Name.TextValue;
+                normalizedName = Svc.Objects.LocalPlayer.Name.TextValue;
             }
         }
 
@@ -1088,10 +1092,10 @@ public sealed class Plugin : IDalamudPlugin
 
     public string GetCurrentUserIdentifier()
     {
-        if (clientState.LocalPlayer == null) return "";
+        if (Svc.Objects?.LocalPlayer == null) return "";
         
-        var characterName = clientState.LocalPlayer.Name.TextValue;
-        var worldName = clientState.LocalPlayer.HomeWorld.Value.Name.ToString() ?? "";
+        var characterName = Svc.Objects.LocalPlayer.Name.TextValue;
+        var worldName = Svc.Objects.LocalPlayer.HomeWorld.Value.Name.ToString() ?? "";
         
         return string.IsNullOrEmpty(worldName) ? "" : $"{characterName}@{worldName}";
     }
