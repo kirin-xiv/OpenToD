@@ -1,0 +1,43 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Dalamud.NET.Sdk/15.0.0">
+    <PropertyGroup>
+        <AssemblyName>FFToD</AssemblyName>
+        <!-- Single source of truth for version - change ONLY this line to update everywhere -->
+        <Version>2.4.8.0</Version>
+        <AssemblyVersion>$(Version)</AssemblyVersion>
+        <FileVersion>$(Version)</FileVersion>
+        <Authors>Kirin Avenleigh</Authors>
+        <Description>Truth or Dare mini-game automation plugin for FFXIV</Description>
+        <PackageProjectUrl>https://github.com/kirin-xiv/FFToD-Release</PackageProjectUrl>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <IsPackable>false</IsPackable>
+        <DalamudApiLevel>15</DalamudApiLevel>
+        <TargetFramework>net10.0-windows7.0</TargetFramework>
+    </PropertyGroup>
+
+    <!-- Auto-update JSON files with current version before build -->
+    <ItemGroup>
+        <PackageReference Include="ECommons" Version="*" />
+        <PackageReference Include="Hexa.NET.ImGui" Version="2.2.9" />
+    </ItemGroup>
+    <!-- Package reference for DalamudPackager -->
+    <ItemGroup>
+        <PackageReference Update="DalamudPackager" Version="15.0.0" />
+
+        <PackageReference Update="DotNet.ReproducibleBuilds" Version="1.2.39" />
+    </ItemGroup>
+    <!-- Package the plugin after building in Release mode -->
+    <Target Name="PackagePlugin" AfterTargets="Build" Condition="'$(Configuration)' == 'Release'">
+        <DalamudPackager ProjectDir="$(ProjectDir)" OutputPath="$(OutputPath)" AssemblyName="$(AssemblyName)" MakeZip="true" />
+
+    </Target>
+
+    <Target Name="UpdateJsonVersions" BeforeTargets="BeforeBuild">
+        <Message Text="Updating JSON files to version $(Version)..." Importance="high" />
+
+        <!-- Update FFToD.json using PowerShell -->
+        <Exec Command="powershell -Command &quot;$json = Get-Content '$(ProjectDir)FFToD.json' | ConvertFrom-Json; $json.AssemblyVersion = '$(Version)'; $json | ConvertTo-Json -Depth 10 | Set-Content '$(ProjectDir)FFToD.json'&quot;" ContinueOnError="false" />
+
+        <Message Text="Updated FFToD.json to version $(Version)" Importance="high" />
+    </Target>
+</Project>
