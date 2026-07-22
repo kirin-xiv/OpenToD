@@ -204,7 +204,7 @@ public class MainWindow : Window, IDisposable
         this.configuration = configuration;
 
         // Set window size properties - increased height for Settings tab
-        this.Size = new Vector2(600, 800);
+        this.Size = new Vector2(600, 880);
         this.SizeCondition = ImGuiCond.FirstUseEver;
 
         // Apply saved theme
@@ -797,9 +797,9 @@ public class MainWindow : Window, IDisposable
         ModernStyle.ApplyCardStyle();
 
         // Use remaining available height for roll results, leaving space for commands/footer
-        float availableHeight = ImGui.GetContentRegionAvail().Y - 120; // Leave room for commands and footer
+        float availableHeight = Math.Max(150, ImGui.GetContentRegionAvail().Y - 50);
 
-        if (ImGui.BeginChild("ResultsCard", new Vector2(0, availableHeight), true, ImGuiWindowFlags.NoScrollbar))
+        if (ImGui.BeginChild("ResultsCard", new Vector2(0, availableHeight), true))
         {
             // Header with icon
             ImGui.PushFont(UiBuilder.IconFont);
@@ -812,19 +812,15 @@ public class MainWindow : Window, IDisposable
 
             if (gameRolls.Count == 0)
             {
-                // No rolls yet - show placeholder message
                 ImGui.TextColored(ModernStyle.TextSecondary, "No rolls yet... waiting for players to /random");
             }
             else
             {
-                // Table display with scrolling for long player lists
-                if (ImGui.BeginTable("RollsTable", 2, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.ScrollY))
+                if (ImGui.BeginTable("RollsTable", 2, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg))
                 {
-                    // Setup columns with better sizing
                     ImGui.TableSetupColumn("Player", ImGuiTableColumnFlags.WidthStretch);
                     ImGui.TableSetupColumn("Roll", ImGuiTableColumnFlags.WidthFixed, 80);
 
-                    // Table headers
                     ImGui.TableNextRow(ImGuiTableRowFlags.Headers);
                     ImGui.TableNextColumn();
                     ImGui.TextColored(ModernStyle.AccentPurple, "Player");
@@ -836,14 +832,11 @@ public class MainWindow : Window, IDisposable
                     ImGui.TableNextRow();
                     ImGui.TableNextColumn();
 
-                    // Show bonus prize icon if player hit a bonus number
                     bool isBonusHit = configuration.EnableBonusPrizes && configuration.BonusPrizes.Any(bp => bp.Number == roll.Value);
 
-                    // Color code players based on game status
                     var currentWinner = plugin.GetCurrentRoundWinner();
                     if (!string.IsNullOrEmpty(currentWinner) && roll.Key == currentWinner)
                     {
-                        // Winner in gold
                         ImGui.PushFont(UiBuilder.IconFont);
                         ImGui.TextColored(ModernStyle.WarningYellow, FontAwesomeIcon.Crown.ToIconString());
                         ImGui.PopFont();
@@ -852,16 +845,13 @@ public class MainWindow : Window, IDisposable
                     }
                     else if (roll.Key == configuration.LastWinner)
                     {
-                        // Excluded player in muted color
                         ImGui.TextColored(ModernStyle.TextSecondary, roll.Key + " (excluded)");
                     }
                     else
                     {
-                        // Normal player
                         ImGui.TextColored(ModernStyle.TextPrimary, roll.Key);
                     }
                     
-                    // Bonus prize indicator
                     if (isBonusHit)
                     {
                         ImGui.SameLine();
@@ -878,16 +868,8 @@ public class MainWindow : Window, IDisposable
 
                     ImGui.TableNextColumn();
 
-                    // Color code roll values
-                    Vector4 rollColor = roll.Value <= 100 ?
-                        ModernStyle.DangerRed : // Red for strippers
-                        ModernStyle.TextPrimary; // White for normal
-                    
-                    // Bonus prize hits get gold color too
-                    if (isBonusHit)
-                        rollColor = new Vector4(1.0f, 0.85f, 0.0f, 1.0f);
-
-                    // Add special formatting for high rolls
+                    Vector4 rollColor = roll.Value <= 100 ? ModernStyle.DangerRed : ModernStyle.TextPrimary;
+                    if (isBonusHit) rollColor = new Vector4(1.0f, 0.85f, 0.0f, 1.0f);
                     if (roll.Value >= 900)
                     {
                         ImGui.PushFont(UiBuilder.IconFont);
@@ -895,138 +877,82 @@ public class MainWindow : Window, IDisposable
                         ImGui.PopFont();
                         ImGui.SameLine();
                     }
-
                     ImGui.TextColored(rollColor, roll.Value.ToString());
                     }
 
                     ImGui.EndTable();
                 }
+                
+                // Winner info inside the scrollable area
+                ImGui.Spacing();
+                ShowWinnerInfoInline(gameRolls);
             }
         }
         ImGui.EndChild();
         ModernStyle.PopCardStyle();
-
-        // Winner announcement and copy functionality - OUTSIDE the child window to prevent clipping
-        ShowWinnerInfo(gameRolls);
     }
 
-    private void ShowWinnerInfo(IReadOnlyDictionary<string, int> gameRolls)
+    private void ShowWinnerInfoInline(IReadOnlyDictionary<string, int> gameRolls)
     {
-        // Determine winners and strippers for display
         var currentRoundWinners = plugin.GetCurrentRoundWinners();
         
         if (currentRoundWinners.Count > 0)
         {
-            // Generate stripper list
             var stripperList = gameRolls.Where(kvp => kvp.Value <= 100).Select(kvp => kvp.Key).ToList();
             string stripListDisplay = stripperList.Count > 0 ? string.Join(", ", stripperList) : "None";
+            string status = plugin.IsRollingPhase ? " (Tentative)" : "";
 
-            // Winner announcement card - adjust height based on winner count
-            int cardHeight = currentRoundWinners.Count > 1 ? 100 : 80;
+            ImGui.Separator();
+            ImGui.PushFont(UiBuilder.IconFont);
+            ImGui.TextColored(ModernStyle.WarningYellow, FontAwesomeIcon.Trophy.ToIconString());
+            ImGui.PopFont();
+            ImGui.SameLine();
             
-            ImGui.Spacing();
-            ModernStyle.ApplyCardStyle();
-            if (ImGui.BeginChild("WinnerCard", new Vector2(0, cardHeight), true, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse))
+            if (currentRoundWinners.Count == 1)
             {
-                string status = plugin.IsRollingPhase ? " (Tentative)" : "";
+                int roll = gameRolls.TryGetValue(currentRoundWinners[0], out int r) ? r : 0;
+                ImGui.TextColored(ModernStyle.WarningYellow, $"Winner: {currentRoundWinners[0]} ({roll}){status}");
+            }
+            else
+            {
+                var winnerDetails = currentRoundWinners.Select(w => 
+                    $"{w} ({(gameRolls.TryGetValue(w, out int r) ? r : 0)})"
+                );
+                ImGui.TextColored(ModernStyle.WarningYellow, $"Winners: {string.Join(", ", winnerDetails)}{status}");
+            }
 
-                // Add some vertical spacing for centering
-                ImGui.Spacing();
-
-                // Winner announcement with icons
+            if (stripperList.Count > 0)
+            {
+                ImGui.PushFont(UiBuilder.IconFont);
+                ImGui.TextColored(ModernStyle.DangerRed, FontAwesomeIcon.Heart.ToIconString());
+                ImGui.PopFont();
+                ImGui.SameLine();
+                ImGui.TextColored(ModernStyle.DangerRed, $"Strippers: {stripListDisplay}");
+            }
+        }
+        else if (plugin.IsRollingPhase && gameRolls.Count > 0)
+        {
+            var sortedRolls = gameRolls.OrderByDescending(kvp => kvp.Value).ToList();
+            var tentativeWinners = new List<KeyValuePair<string, int>>();
+            int winnersNeeded = Math.Min(configuration.NumberOfWinners, sortedRolls.Count);
+            for (int i = 0; i < winnersNeeded && i < sortedRolls.Count; i++)
+                tentativeWinners.Add(sortedRolls[i]);
+            
+            if (tentativeWinners.Count > 0)
+            {
+                ImGui.Separator();
                 ImGui.PushFont(UiBuilder.IconFont);
                 ImGui.TextColored(ModernStyle.WarningYellow, FontAwesomeIcon.Trophy.ToIconString());
                 ImGui.PopFont();
                 ImGui.SameLine();
                 
-                if (currentRoundWinners.Count == 1)
-                {
-                    int roll = gameRolls.TryGetValue(currentRoundWinners[0], out int r) ? r : 0;
-                    ImGui.TextColored(ModernStyle.WarningYellow, $"Winner: {currentRoundWinners[0]} ({roll}){status}");
-                }
+                if (tentativeWinners.Count == 1)
+                    ImGui.TextColored(ModernStyle.WarningYellow, $"Winner: {tentativeWinners[0].Key} ({tentativeWinners[0].Value}) (Tentative)");
                 else
                 {
-                    var winnerDetails = currentRoundWinners.Select(w => 
-                        $"{w} ({(gameRolls.TryGetValue(w, out int r) ? r : 0)})"
-                    );
-                    ImGui.TextColored(ModernStyle.WarningYellow, $"Winners: {string.Join(", ", winnerDetails)}{status}");
+                    var winnerText = string.Join(", ", tentativeWinners.Select(w => $"{w.Key} ({w.Value})"));
+                    ImGui.TextColored(ModernStyle.WarningYellow, $"Winners: {winnerText} (Tentative)");
                 }
-
-                if (stripperList.Count > 0)
-                {
-                    ImGui.PushFont(UiBuilder.IconFont);
-                    ImGui.TextColored(ModernStyle.DangerRed, FontAwesomeIcon.Heart.ToIconString());
-                    ImGui.PopFont();
-                    ImGui.SameLine();
-                    ImGui.TextColored(ModernStyle.DangerRed, $"Strippers: {stripListDisplay}");
-                }
-                else
-                {
-                    ImGui.TextColored(ModernStyle.TextSecondary, "No strippers this round!");
-                }
-            }
-            ImGui.EndChild();
-            ModernStyle.PopCardStyle();
-        }
-        else if (plugin.IsRollingPhase && gameRolls.Count > 0)
-        {
-            // Show tentative winner during rolling phase
-            var sortedRolls = gameRolls.OrderByDescending(kvp => kvp.Value).ToList();
-            
-            // Determine tentative winners based on NumberOfWinners setting
-            var tentativeWinners = new List<KeyValuePair<string, int>>();
-            int winnersNeeded = Math.Min(configuration.NumberOfWinners, sortedRolls.Count);
-            
-            for (int i = 0; i < winnersNeeded && i < sortedRolls.Count; i++)
-            {
-                tentativeWinners.Add(sortedRolls[i]);
-            }
-            
-            if (tentativeWinners.Count > 0)
-            {
-                // Generate stripper list
-                var stripperList = gameRolls.Where(kvp => kvp.Value <= 100).Select(kvp => kvp.Key).ToList();
-                string stripListDisplay = stripperList.Count > 0 ? string.Join(", ", stripperList) : "None";
-
-                // Winner announcement card
-                int cardHeight = tentativeWinners.Count > 1 ? 100 : 80;
-                
-                ImGui.Spacing();
-                ModernStyle.ApplyCardStyle();
-                if (ImGui.BeginChild("WinnerCard", new Vector2(0, cardHeight), true, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse))
-                {
-                    ImGui.Spacing();
-
-                    ImGui.PushFont(UiBuilder.IconFont);
-                    ImGui.TextColored(ModernStyle.WarningYellow, FontAwesomeIcon.Trophy.ToIconString());
-                    ImGui.PopFont();
-                    ImGui.SameLine();
-                    
-                    if (tentativeWinners.Count == 1)
-                    {
-                        ImGui.TextColored(ModernStyle.WarningYellow, $"Winner: {tentativeWinners[0].Key} ({tentativeWinners[0].Value}) (Tentative)");
-                    }
-                    else
-                    {
-                        var winnerText = string.Join(", ", tentativeWinners.Select(w => $"{w.Key} ({w.Value})"));
-                        ImGui.TextColored(ModernStyle.WarningYellow, $"Winners: {winnerText} (Tentative)");
-                    }
-
-                    if (stripperList.Count > 0)
-                    {
-                        ImGui.PushFont(UiBuilder.IconFont);
-                        ImGui.TextColored(ModernStyle.DangerRed, FontAwesomeIcon.Heart.ToIconString());
-                        ImGui.PopFont();
-                        ImGui.SameLine();
-                        ImGui.TextColored(ModernStyle.DangerRed, $"Strippers: {stripListDisplay}");
-                    }
-                    else
-                    {
-                        ImGui.TextColored(ModernStyle.TextSecondary, "No strippers this round!");
-                    }
-                }
-                ImGui.EndChild();
-                ModernStyle.PopCardStyle();
             }
         }
     }
@@ -1121,93 +1047,6 @@ public class MainWindow : Window, IDisposable
             }
             if (ImGui.IsItemHovered())
                 ImGui.SetTooltip(GetWinnerModeDescription(currentMode));
-        }
-        ImGui.EndChild();
-        ModernStyle.PopCardStyle();
-        
-        ImGui.Spacing();
-        
-        // Auto-Skip Players
-        ModernStyle.ApplyCardStyle();
-        float autoSkipHeight = configuration.AutoSkipPlayers.Count > 0 ? Math.Min(200f, 55f + configuration.AutoSkipPlayers.Count * 25f) : 70f;
-        if (ImGui.BeginChild("AutoSkipCard", new Vector2(0, autoSkipHeight), true, ImGuiWindowFlags.None))
-        {
-            ImGui.PushFont(UiBuilder.IconFont);
-            ImGui.TextColored(ModernStyle.AccentPurple, FontAwesomeIcon.Forward.ToIconString());
-            ImGui.PopFont();
-            ImGui.SameLine();
-            ImGui.TextColored(ModernStyle.AccentPurple, "Auto-Skip Players");
-            ImGui.Separator();
-            ImGui.Spacing();
-            
-            ImGui.TextColored(ModernStyle.TextSecondary, "These players will be automatically skipped if they win:");
-            ImGui.Spacing();
-            
-            int skipToRemove = -1;
-            string newSkipName = "";
-            
-            if (ImGui.BeginTable("AutoSkipTable", 2, ImGuiTableFlags.SizingFixedFit))
-            {
-                ImGui.TableSetupColumn("Player Name", ImGuiTableColumnFlags.WidthStretch);
-                ImGui.TableSetupColumn("", ImGuiTableColumnFlags.WidthFixed, 35);
-                
-                for (int i = 0; i < configuration.AutoSkipPlayers.Count; i++)
-                {
-                    ImGui.TableNextRow();
-                    ImGui.TableNextColumn();
-                    var name = configuration.AutoSkipPlayers[i] ?? "";
-                    ImGui.SetNextItemWidth(-1);
-                    if (ImGui.InputText($"##AutoSkip{i}", ref name, 60))
-                    {
-                        configuration.AutoSkipPlayers[i] = name;
-                        configuration.Save();
-                    }
-                    ImGui.TableNextColumn();
-                    ImGui.PushFont(UiBuilder.IconFont);
-                    if (ImGui.Button($"{FontAwesomeIcon.Trash.ToIconString()}##DelSkip{i}", new Vector2(25, 20)))
-                    {
-                        skipToRemove = i;
-                    }
-                    ImGui.PopFont();
-                    if (ImGui.IsItemHovered())
-                        ImGui.SetTooltip("Remove");
-                }
-                
-                // Add row
-                ImGui.TableNextRow();
-                ImGui.TableNextColumn();
-                ImGui.SetNextItemWidth(-1);
-                ImGui.InputTextWithHint("##AutoSkipNew", "Enter player name...", ref newSkipName, 60);
-                if (ImGui.IsItemDeactivatedAfterEdit() && !string.IsNullOrWhiteSpace(newSkipName))
-                {
-                    if (!configuration.AutoSkipPlayers.Any(s => s.Equals(newSkipName.Trim(), StringComparison.OrdinalIgnoreCase)))
-                    {
-                        configuration.AutoSkipPlayers.Add(newSkipName.Trim());
-                        configuration.Save();
-                    }
-                }
-                ImGui.TableNextColumn();
-                ImGui.PushFont(UiBuilder.IconFont);
-                if (ImGui.Button($"{FontAwesomeIcon.Plus.ToIconString()}##AddSkip", new Vector2(25, 20)) && !string.IsNullOrWhiteSpace(newSkipName))
-                {
-                    if (!configuration.AutoSkipPlayers.Any(s => s.Equals(newSkipName.Trim(), StringComparison.OrdinalIgnoreCase)))
-                    {
-                        configuration.AutoSkipPlayers.Add(newSkipName.Trim());
-                        configuration.Save();
-                    }
-                }
-                ImGui.PopFont();
-                if (ImGui.IsItemHovered())
-                    ImGui.SetTooltip("Add");
-                
-                ImGui.EndTable();
-            }
-            
-            if (skipToRemove >= 0 && skipToRemove < configuration.AutoSkipPlayers.Count)
-            {
-                configuration.AutoSkipPlayers.RemoveAt(skipToRemove);
-                configuration.Save();
-            }
         }
         ImGui.EndChild();
         ModernStyle.PopCardStyle();
@@ -1567,6 +1406,106 @@ public class MainWindow : Window, IDisposable
             }
             if (ImGui.IsItemHovered())
                 ImGui.SetTooltip("Enables special debug roll patterns for testing");
+        }
+        ImGui.EndChild();
+        ModernStyle.PopCardStyle();
+        
+        ImGui.Spacing();
+        
+        // Auto-Skip Players
+        ModernStyle.ApplyCardStyle();
+        float autoSkipHeight = configuration.AutoSkipPlayers.Count > 0 ? Math.Min(200f, 110f + configuration.AutoSkipPlayers.Count * 25f) : 125f;
+        if (ImGui.BeginChild("AutoSkipCard", new Vector2(0, autoSkipHeight), true, ImGuiWindowFlags.None))
+        {
+            ImGui.PushFont(UiBuilder.IconFont);
+            ImGui.TextColored(ModernStyle.AccentPurple, FontAwesomeIcon.Forward.ToIconString());
+            ImGui.PopFont();
+            ImGui.SameLine();
+            ImGui.TextColored(ModernStyle.AccentPurple, "Auto-Skip Players");
+            ImGui.Separator();
+            ImGui.Spacing();
+            
+            ImGui.TextColored(ModernStyle.TextSecondary, "These players will be automatically skipped if they win:");
+            
+            var autoSkipBlast = configuration.AutoSkipBlast;
+            if (ImGui.Checkbox("Put Autoskippers on Blast?", ref autoSkipBlast))
+            {
+                configuration.AutoSkipBlast = autoSkipBlast;
+                configuration.Save();
+            }
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("When enabled, posts a separate message listing all auto-skipped players after results");
+            
+            ImGui.Spacing();
+            ImGui.Spacing();
+            
+            int skipToRemove = -1;
+            string newSkipName = "";
+            
+            if (ImGui.BeginTable("AutoSkipTable", 2, ImGuiTableFlags.SizingFixedFit))
+            {
+                ImGui.TableSetupColumn("Player Name", ImGuiTableColumnFlags.WidthStretch);
+                ImGui.TableSetupColumn("", ImGuiTableColumnFlags.WidthFixed, 35);
+                
+                for (int i = 0; i < configuration.AutoSkipPlayers.Count; i++)
+                {
+                    ImGui.TableNextRow();
+                    ImGui.TableNextColumn();
+                    var name = configuration.AutoSkipPlayers[i] ?? "";
+                    ImGui.SetNextItemWidth(-1);
+                    if (ImGui.InputText($"##AutoSkip{i}", ref name, 60))
+                    {
+                        configuration.AutoSkipPlayers[i] = name;
+                        configuration.Save();
+                    }
+                    ImGui.TableNextColumn();
+                    ImGui.PushFont(UiBuilder.IconFont);
+                    if (ImGui.Button($"{FontAwesomeIcon.Trash.ToIconString()}##DelSkip{i}", new Vector2(25, 20)))
+                    {
+                        skipToRemove = i;
+                    }
+                    ImGui.PopFont();
+                    if (ImGui.IsItemHovered())
+                        ImGui.SetTooltip("Remove");
+                }
+                
+                // Add row
+                ImGui.TableNextRow();
+                ImGui.TableNextColumn();
+                ImGui.SetNextItemWidth(-1);
+                ImGui.InputTextWithHint("##AutoSkipNew", "Enter player name...", ref newSkipName, 60);
+                if (ImGui.IsItemDeactivatedAfterEdit() && !string.IsNullOrWhiteSpace(newSkipName))
+                {
+                    if (!configuration.AutoSkipPlayers.Any(s => s.Equals(newSkipName.Trim(), StringComparison.OrdinalIgnoreCase)))
+                    {
+                        configuration.AutoSkipPlayers.Add(newSkipName.Trim());
+                        configuration.Save();
+                    }
+                }
+                ImGui.TableNextColumn();
+                ImGui.PushFont(UiBuilder.IconFont);
+                if (ImGui.Button($"{FontAwesomeIcon.Plus.ToIconString()}##AddSkip", new Vector2(25, 20)) && !string.IsNullOrWhiteSpace(newSkipName))
+                {
+                    if (!configuration.AutoSkipPlayers.Any(s => s.Equals(newSkipName.Trim(), StringComparison.OrdinalIgnoreCase)))
+                    {
+                        configuration.AutoSkipPlayers.Add(newSkipName.Trim());
+                        configuration.Save();
+                    }
+                }
+                ImGui.PopFont();
+                if (ImGui.IsItemHovered())
+                    ImGui.SetTooltip("Add");
+                
+                ImGui.EndTable();
+            }
+            
+            if (skipToRemove >= 0 && skipToRemove < configuration.AutoSkipPlayers.Count)
+            {
+                configuration.AutoSkipPlayers.RemoveAt(skipToRemove);
+                configuration.Save();
+            }
+            ImGui.Spacing();
+            ImGui.Spacing();
         }
         ImGui.EndChild();
         ModernStyle.PopCardStyle();

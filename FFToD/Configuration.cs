@@ -116,7 +116,7 @@ public class AnnouncementTemplates
     public string PassedWinnerResult { get; set; } = "Winner #{WINNER_NUMBER}: {WINNER_NAME} ({WINNER_ROLL}) (passed from {PASSED_FROM}) | Strippers: {STRIPPERS}";
     public string JackpotWinnerResult { get; set; } = "JACKPOT! {WINNER_NAME} rolled {JACKPOT_VALUE}! Host decides their fate! | Strippers: {STRIPPERS}";
     public string BonusPrizeResult { get; set; } = "Bonus Prizes! {BONUS_PRIZE_WINNERS}";
-    public string HighestAsksLowestResult { get; set; } = "{WINNER_NAME} ({WINNER_ROLL}) asks {OTHER_WINNER} ({OTHER_ROLL}) — Truth or Dare? | Strippers: {STRIPPERS}";
+    public string HighestAsksLowestResult { get; set; } = "{WINNER_NAME} ({WINNER_ROLL}) asks {OTHER_WINNER} ({OTHER_ROLL}) — Truth or Dare?{PASSED_FROM} | Strippers: {STRIPPERS}";
     
     public static readonly Dictionary<string, string> PlaceholderDescriptions = new()
     {
@@ -165,6 +165,7 @@ public class GameProfile
     public bool EnableBonusPrizes { get; set; } = false;
     public List<BonusPrize> BonusPrizes { get; set; } = new List<BonusPrize>();
     public List<string> AutoSkipPlayers { get; set; } = new List<string>();
+    public bool AutoSkipBlast { get; set; } = true;
 
     public GameProfile() { }
 
@@ -221,6 +222,7 @@ public class GameProfile
         EnableBonusPrizes = config.EnableBonusPrizes;
         BonusPrizes = config.BonusPrizes.Select(bp => new BonusPrize { Number = bp.Number, Prize = bp.Prize }).ToList();
         AutoSkipPlayers = new List<string>(config.AutoSkipPlayers);
+        AutoSkipBlast = config.AutoSkipBlast;
     }
 
     public void ApplyToConfiguration(Configuration config)
@@ -269,6 +271,7 @@ public class GameProfile
         config.EnableBonusPrizes = EnableBonusPrizes;
         config.BonusPrizes = BonusPrizes.Select(bp => new BonusPrize { Number = bp.Number, Prize = bp.Prize }).ToList();
         config.AutoSkipPlayers = new List<string>(AutoSkipPlayers);
+        config.AutoSkipBlast = AutoSkipBlast;
     }
 }
 
@@ -316,6 +319,7 @@ public class Configuration : IPluginConfiguration
     public List<BonusPrize> BonusPrizes { get; set; } = new List<BonusPrize>();
     
     public List<string> AutoSkipPlayers { get; set; } = new List<string>();
+    public bool AutoSkipBlast { get; set; } = true;
     
     public bool AutoPostRules { get; set; } = true;
     public bool AutoPostResults { get; set; } = true;

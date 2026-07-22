@@ -540,6 +540,7 @@ public sealed class Plugin : IDalamudPlugin
             if (winnersNeeded == 1)
             {
                 var excludeList = new List<string>(configuration.LastWinners);
+                excludeList.AddRange(configuration.AutoSkipPlayers);
 
                 switch (configuration.WinnerMode)
                 {
@@ -601,6 +602,7 @@ public sealed class Plugin : IDalamudPlugin
             else if (winnersNeeded >= 2)
             {
                 var excludeList = new List<string>(configuration.LastWinners);
+                excludeList.AddRange(configuration.AutoSkipPlayers);
 
                 switch (configuration.WinnerMode)
                 {
@@ -709,40 +711,24 @@ public sealed class Plugin : IDalamudPlugin
                 }
             }
 
-            // Auto-skip: if any winner is on the auto-skip list, pass to next eligible player
-            if (configuration.AutoSkipPlayers.Count > 0 && !isJackpotRound)
-            {
-                for (int i = currentRoundWinners.Count - 1; i >= 0; i--)
-                {
-                    var winner = currentRoundWinners[i];
-                    if (configuration.AutoSkipPlayers.Any(s => s.Equals(winner, StringComparison.OrdinalIgnoreCase)))
-                    {
-                        // Find replacement
-                        var sortedForSkip = currentRolls.OrderByDescending(kvp => kvp.Value).ToList();
-                        var excludeList = new List<string>(configuration.LastWinners);
-                        excludeList.AddRange(currentRoundWinners);
-                        excludeList.AddRange(configuration.AutoSkipPlayers);
-                        
-                        var replacement = FindMultipleWinnersWithTiebreaker(sortedForSkip, excludeList, 1).FirstOrDefault();
-                        if (string.IsNullOrEmpty(replacement))
-                        {
-                            excludeList = new List<string>(currentRoundWinners);
-                            excludeList.AddRange(configuration.AutoSkipPlayers);
-                            replacement = FindMultipleWinnersWithTiebreaker(sortedForSkip, excludeList, 1).FirstOrDefault();
-                        }
-                        
-                        if (!string.IsNullOrEmpty(replacement))
-                        {
-                            autoSkippedThisRound.Add($"{winner} -> {replacement}");
-                            currentRoundWinners[i] = replacement;
-                        }
-                    }
-                }
-            }
-
             if (configuration.AutoPostResults)
             {
                 QueueChatMessage($"{statusChannel} {configuration.Announcements.RollsClosed}");
+                
+                // Auto-skip blast: after "Rolls Closed", before winner results
+                if (configuration.AutoSkipBlast && configuration.AutoSkipPlayers.Count > 0)
+                {
+                    var skippedRollers = currentRolls
+                        .Where(kvp => configuration.AutoSkipPlayers.Any(s => s.Equals(kvp.Key, StringComparison.OrdinalIgnoreCase)))
+                        .Select(kvp => $"{kvp.Key} ({kvp.Value})")
+                        .ToList();
+                    
+                    if (skippedRollers.Count > 0)
+                    {
+                        var resultsChannel = configuration.ChatChannels.GetChannelCommand(configuration.ChatChannels.ResultsChannel);
+                        QueueChatMessage($"{resultsChannel} Auto-Skipped: {string.Join(", ", skippedRollers)}");
+                    }
+                }
                 
                 if (configuration.ChatChannels.UseWinnerSpecificChannels && currentRoundWinners.Count > 0)
                 {
@@ -777,7 +763,16 @@ public sealed class Plugin : IDalamudPlugin
                         int askerRoll = currentRolls.TryGetValue(currentRoundWinners[0], out int aRoll) ? aRoll : 0;
                         int doerRoll = currentRolls.TryGetValue(currentRoundWinners[1], out int dRoll) ? dRoll : 0;
                         
-                        var summaryMessage = $"{resultsChannel} {ProcessAnnouncementTemplate(configuration.Announcements.HighestAsksLowestResult, currentRoundWinners[0], askerRoll, 1, stripMessage, "", "", currentRoundWinners[1], doerRoll)}";
+                        // Check for auto-skips
+                        var askerSkip = autoSkippedThisRound.FirstOrDefault(s => s.EndsWith($" -> {currentRoundWinners[0]}"));
+                        var doerSkip = autoSkippedThisRound.FirstOrDefault(s => s.EndsWith($" -> {currentRoundWinners[1]}"));
+                        var passedFrom = "";
+                        if (!string.IsNullOrEmpty(askerSkip))
+                            passedFrom = $" (passed from {askerSkip.Split(" -> ")[0]})";
+                        else if (!string.IsNullOrEmpty(doerSkip))
+                            passedFrom = $" (passed from {doerSkip.Split(" -> ")[0]})";
+                        
+                        var summaryMessage = $"{resultsChannel} {ProcessAnnouncementTemplate(configuration.Announcements.HighestAsksLowestResult, currentRoundWinners[0], askerRoll, 1, stripMessage, passedFrom, "", currentRoundWinners[1], doerRoll)}";
                         QueueChatMessage(summaryMessage);
                     }
                     else if (currentRoundWinners.Count == 1)
