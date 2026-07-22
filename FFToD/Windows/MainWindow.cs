@@ -21,7 +21,8 @@ public class MainWindow : Window, IDisposable
         ForestGreen,
         FoxxiOrange,
         RoseGold,
-        MidnightBlue
+        MidnightBlue,
+        KayaNoir
     }
     
     public static string GetThemeDisplayName(ThemeType theme)
@@ -34,6 +35,7 @@ public class MainWindow : Window, IDisposable
             ThemeType.FoxxiOrange => "Foxxi Orange",
             ThemeType.RoseGold => "Rose Gold",
             ThemeType.MidnightBlue => "Midnight Blue",
+            ThemeType.KayaNoir => "Kaya Noir",
             _ => theme.ToString()
         };
     }
@@ -107,6 +109,14 @@ public class MainWindow : Window, IDisposable
                     AccentPurple = new(0.4f, 0.6f, 1.0f, 1.0f);
                     AccentPurpleHover = new(0.5f, 0.7f, 1.0f, 1.0f);
                     AccentPurpleActive = new(0.3f, 0.5f, 0.9f, 1.0f);
+                    break;
+                case ThemeType.KayaNoir:
+                    BackgroundPrimary = new(0.06f, 0.06f, 0.06f, 1.0f);
+                    BackgroundSecondary = new(0.10f, 0.10f, 0.10f, 1.0f);
+                    BackgroundCard = new(0.14f, 0.14f, 0.14f, 0.95f);
+                    AccentPurple = new(0.55f, 0.55f, 0.55f, 1.0f);
+                    AccentPurpleHover = new(0.65f, 0.65f, 0.65f, 1.0f);
+                    AccentPurpleActive = new(0.45f, 0.45f, 0.45f, 1.0f);
                     break;
             }
             
@@ -185,6 +195,7 @@ public class MainWindow : Window, IDisposable
     private string importData = "";
     private string importFeedback = "";
     private bool importSuccess = false;
+    private int newBonusNumber = 0;
 
     public MainWindow(Plugin plugin, Configuration configuration)
         : base("Truth or Dare##MainWindow")
@@ -208,36 +219,6 @@ public class MainWindow : Window, IDisposable
 
     private void SetupTitleBarButtons()
     {
-        // Stop round button
-        this.TitleBarButtons.Add(new TitleBarButton
-        {
-            Icon = FontAwesomeIcon.Stop,
-            Click = (msg) =>
-            {
-                plugin.StopGame();
-            },
-            IconOffset = new Vector2(2, 1),
-            ShowTooltip = () =>
-            {
-                ImGui.SetTooltip("Stop Game");
-            }
-        });
-
-        // Start round button
-        this.TitleBarButtons.Add(new TitleBarButton
-        {
-            Icon = FontAwesomeIcon.Play,
-            Click = (msg) =>
-            {
-                plugin.StartGame();
-            },
-            IconOffset = new Vector2(2, 1),
-            ShowTooltip = () =>
-            {
-                ImGui.SetTooltip("Start Game");
-            }
-        });
-
         // Copy results button
         this.TitleBarButtons.Add(new TitleBarButton
         {
@@ -252,37 +233,6 @@ public class MainWindow : Window, IDisposable
                 ImGui.SetTooltip("Copy Results to Clipboard");
             }
         });
-
-        // Logout button
-        this.TitleBarButtons.Add(new TitleBarButton
-        {
-            Icon = FontAwesomeIcon.SignOutAlt,
-            Click = (msg) =>
-            {
-                plugin.Logout();
-            },
-            IconOffset = new Vector2(2, 1),
-            ShowTooltip = () =>
-            {
-                ImGui.SetTooltip("Logout");
-            }
-        });
-
-        // Settings button
-        this.TitleBarButtons.Add(new TitleBarButton
-        {
-            Icon = FontAwesomeIcon.Cog,
-            Click = (msg) =>
-            {
-                plugin.OpenConfigWindow();
-            },
-            IconOffset = new Vector2(2, 1),
-            ShowTooltip = () =>
-            {
-                ImGui.SetTooltip("Open Settings");
-            }
-        });
-
     }
 
     private void CopyCurrentResults()
@@ -560,7 +510,7 @@ public class MainWindow : Window, IDisposable
 
         ImGui.Spacing();
         ModernStyle.ApplyCardStyle();
-        if (ImGui.BeginChild("StatisticsCard", new Vector2(0, 100), true, ImGuiWindowFlags.NoScrollbar))
+        if (ImGui.BeginChild("StatisticsCard", new Vector2(0, 110), true, ImGuiWindowFlags.NoScrollbar))
         {
             ImGui.PushFont(UiBuilder.IconFont);
             ImGui.TextColored(ModernStyle.AccentPurple, FontAwesomeIcon.ChartBar.ToIconString());
@@ -886,6 +836,9 @@ public class MainWindow : Window, IDisposable
                     ImGui.TableNextRow();
                     ImGui.TableNextColumn();
 
+                    // Show bonus prize icon if player hit a bonus number
+                    bool isBonusHit = configuration.EnableBonusPrizes && configuration.BonusPrizes.Any(bp => bp.Number == roll.Value);
+
                     // Color code players based on game status
                     var currentWinner = plugin.GetCurrentRoundWinner();
                     if (!string.IsNullOrEmpty(currentWinner) && roll.Key == currentWinner)
@@ -907,6 +860,21 @@ public class MainWindow : Window, IDisposable
                         // Normal player
                         ImGui.TextColored(ModernStyle.TextPrimary, roll.Key);
                     }
+                    
+                    // Bonus prize indicator
+                    if (isBonusHit)
+                    {
+                        ImGui.SameLine();
+                        ImGui.PushFont(UiBuilder.IconFont);
+                        ImGui.TextColored(new Vector4(1.0f, 0.85f, 0.0f, 1.0f), FontAwesomeIcon.MoneyBillWave.ToIconString());
+                        ImGui.PopFont();
+                        if (ImGui.IsItemHovered())
+                        {
+                            var bp = configuration.BonusPrizes.FirstOrDefault(b => b.Number == roll.Value);
+                            var label = bp != null && !string.IsNullOrWhiteSpace(bp.Prize) ? $": {bp.Prize}" : "";
+                            ImGui.SetTooltip($"Bonus prize! Rolled {roll.Value}{label}");
+                        }
+                    }
 
                     ImGui.TableNextColumn();
 
@@ -914,6 +882,10 @@ public class MainWindow : Window, IDisposable
                     Vector4 rollColor = roll.Value <= 100 ?
                         ModernStyle.DangerRed : // Red for strippers
                         ModernStyle.TextPrimary; // White for normal
+                    
+                    // Bonus prize hits get gold color too
+                    if (isBonusHit)
+                        rollColor = new Vector4(1.0f, 0.85f, 0.0f, 1.0f);
 
                     // Add special formatting for high rolls
                     if (roll.Value >= 900)
@@ -1063,7 +1035,7 @@ public class MainWindow : Window, IDisposable
     {
         // Theme Selection at the top
         ModernStyle.ApplyCardStyle();
-        if (ImGui.BeginChild("ThemeCard", new Vector2(0, 120), true, ImGuiWindowFlags.NoScrollbar))
+        if (ImGui.BeginChild("ThemeCard", new Vector2(0, 90), true, ImGuiWindowFlags.NoScrollbar))
         {
             ImGui.PushFont(UiBuilder.IconFont);
             ImGui.TextColored(ModernStyle.AccentPurple, FontAwesomeIcon.Palette.ToIconString());
@@ -1111,7 +1083,7 @@ public class MainWindow : Window, IDisposable
             ImGui.Spacing();
             
             var rollTimeout = configuration.RollTimeout;
-            if (ImGui.SliderInt("Roll Timeout (seconds)", ref rollTimeout, 10, 30))
+            if (ImGui.SliderInt("Roll Timeout (seconds)", ref rollTimeout, 10, 60))
             {
                 configuration.RollTimeout = rollTimeout;
                 configuration.Save();
@@ -1155,63 +1127,9 @@ public class MainWindow : Window, IDisposable
         
         ImGui.Spacing();
         
-        // Player Settings
-        ModernStyle.ApplyCardStyle();
-        if (ImGui.BeginChild("PlayerSettingsCard", new Vector2(0, 120), true, ImGuiWindowFlags.NoScrollbar))
-        {
-            ImGui.PushFont(UiBuilder.IconFont);
-            ImGui.TextColored(ModernStyle.AccentPurple, FontAwesomeIcon.User.ToIconString());
-            ImGui.PopFont();
-            ImGui.SameLine();
-            ImGui.TextColored(ModernStyle.AccentPurple, "Player Settings");
-            ImGui.Separator();
-            ImGui.Spacing();
-            
-            var localPlayerName = configuration.LocalPlayerName ?? "";
-            if (ImGui.InputText("Your Character Name", ref localPlayerName, 50))
-            {
-                configuration.LocalPlayerName = localPlayerName;
-                configuration.Save();
-            }
-            if (ImGui.IsItemHovered())
-                ImGui.SetTooltip("Your character name (used to replace 'You' in roll messages)");
-
-            ImGui.Text("Last Winners:");
-            ImGui.SameLine();
-            if (configuration.LastWinners != null && configuration.LastWinners.Count > 0)
-            {
-                ImGui.TextColored(ModernStyle.SuccessGreen, string.Join(", ", configuration.LastWinners));
-                ImGui.SameLine();
-                if (ImGui.SmallButton("Clear"))
-                {
-                    configuration.LastWinner = "";
-                    configuration.LastWinners.Clear();
-                    configuration.Save();
-                }
-            }
-            else if (!string.IsNullOrEmpty(configuration.LastWinner))
-            {
-                ImGui.TextColored(ModernStyle.SuccessGreen, configuration.LastWinner);
-                ImGui.SameLine();
-                if (ImGui.SmallButton("Clear"))
-                {
-                    configuration.LastWinner = "";
-                    configuration.Save();
-                }
-            }
-            else
-            {
-                ImGui.TextDisabled("None");
-            }
-        }
-        ImGui.EndChild();
-        ModernStyle.PopCardStyle();
-        
-        ImGui.Spacing();
-        
         // Chat Channel Settings (scrollable for longer content)
         ModernStyle.ApplyCardStyle();
-        if (ImGui.BeginChild("ChatChannelCard", new Vector2(0, 200), true, ImGuiWindowFlags.None))
+        if (ImGui.BeginChild("ChatChannelCard", new Vector2(0, 145), true, ImGuiWindowFlags.None))
         {
             ImGui.PushFont(UiBuilder.IconFont);
             ImGui.TextColored(ModernStyle.AccentPurple, FontAwesomeIcon.Comments.ToIconString());
@@ -1329,7 +1247,8 @@ public class MainWindow : Window, IDisposable
         
         // Jackpot Settings
         ModernStyle.ApplyCardStyle();
-        if (ImGui.BeginChild("JackpotCard", new Vector2(0, 140), true, ImGuiWindowFlags.NoScrollbar))
+        float jackpotCardHeight = configuration.EnableJackpot ? 140f : 85f;
+        if (ImGui.BeginChild("JackpotCard", new Vector2(0, jackpotCardHeight), true, ImGuiWindowFlags.NoScrollbar))
         {
             ImGui.PushFont(UiBuilder.IconFont);
             ImGui.TextColored(ModernStyle.AccentPurple, FontAwesomeIcon.Star.ToIconString());
@@ -1383,9 +1302,153 @@ public class MainWindow : Window, IDisposable
         
         ImGui.Spacing();
         
+        // Bonus Prizes Settings
+        ModernStyle.ApplyCardStyle();
+        float bonusCardHeight = configuration.EnableBonusPrizes ? 260f : 85f;
+        if (ImGui.BeginChild("BonusPrizesCard", new Vector2(0, bonusCardHeight), true, ImGuiWindowFlags.None))
+        {
+            ImGui.PushFont(UiBuilder.IconFont);
+            ImGui.TextColored(ModernStyle.AccentPurple, FontAwesomeIcon.MoneyBillWave.ToIconString());
+            ImGui.PopFont();
+            ImGui.SameLine();
+            ImGui.TextColored(ModernStyle.AccentPurple, "Bonus Prizes");
+            ImGui.Separator();
+            ImGui.Spacing();
+            
+            var enableBonusPrizes = configuration.EnableBonusPrizes;
+            if (ImGui.Checkbox("Enable Bonus Prizes", ref enableBonusPrizes))
+            {
+                configuration.EnableBonusPrizes = enableBonusPrizes;
+                configuration.Save();
+            }
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("When enabled, rolling a bonus prize number awards gil without affecting the round outcome");
+
+            if (enableBonusPrizes)
+            {
+                ImGui.Spacing();
+                ImGui.TextColored(ModernStyle.TextSecondary, "Players who roll any of these numbers win a bonus prize:");
+                ImGui.Spacing();
+                
+                // Bonus numbers list
+                int numberToRemove = -1;
+                var numberToAdd = new BonusPrize();
+                
+                if (ImGui.BeginTable("BonusNumbersTable", 3, ImGuiTableFlags.SizingFixedFit))
+                {
+                    ImGui.TableSetupColumn("Number", ImGuiTableColumnFlags.WidthFixed, 70);
+                    ImGui.TableSetupColumn("Prize", ImGuiTableColumnFlags.WidthStretch);
+                    ImGui.TableSetupColumn("", ImGuiTableColumnFlags.WidthFixed, 35);
+                    
+                    for (int i = 0; i < configuration.BonusPrizes.Count; i++)
+                    {
+                        var bp = configuration.BonusPrizes[i];
+                        ImGui.TableNextRow();
+                        ImGui.TableNextColumn();
+                        var num = bp.Number;
+                        ImGui.SetNextItemWidth(55);
+                        if (ImGui.InputInt($"##BonusNum{i}", ref num, 0, 0))
+                        {
+                            num = Math.Max(0, num);
+                            bp.Number = num;
+                            configuration.Save();
+                        }
+                        ImGui.TableNextColumn();
+                        var prize = bp.Prize ?? "";
+                        ImGui.SetNextItemWidth(-1);
+                        if (ImGui.InputTextWithHint($"##BonusPrize{i}", "e.g. 100k gil, Fat Cat minion...", ref prize, 60))
+                        {
+                            bp.Prize = prize;
+                            configuration.Save();
+                        }
+                        ImGui.TableNextColumn();
+                        ImGui.PushFont(UiBuilder.IconFont);
+                        if (ImGui.Button($"{FontAwesomeIcon.Trash.ToIconString()}##DelBonus{i}", new Vector2(25, 20)))
+                        {
+                            numberToRemove = i;
+                        }
+                        ImGui.PopFont();
+                        if (ImGui.IsItemHovered())
+                            ImGui.SetTooltip("Remove");
+                    }
+                    
+                    // Add new number row
+                    ImGui.TableNextRow();
+                    ImGui.TableNextColumn();
+                    ImGui.SetNextItemWidth(55);
+                    ImGui.InputInt("##BonusNumNew", ref newBonusNumber, 0, 0);
+                    if (ImGui.IsItemDeactivatedAfterEdit() && newBonusNumber > 0)
+                    {
+                        numberToAdd.Number = newBonusNumber;
+                    }
+                    ImGui.TableNextColumn();
+                    var newPrize = "";
+                    ImGui.SetNextItemWidth(-1);
+                    ImGui.InputTextWithHint("##BonusPrizeNew", "e.g. 100k gil, Fat Cat minion...", ref newPrize, 60);
+                    if (ImGui.IsItemDeactivatedAfterEdit())
+                    {
+                        numberToAdd.Prize = newPrize;
+                    }
+                    ImGui.TableNextColumn();
+                    ImGui.PushFont(UiBuilder.IconFont);
+                    if (ImGui.Button($"{FontAwesomeIcon.Plus.ToIconString()}##AddBonus", new Vector2(25, 20)) && newBonusNumber > 0)
+                    {
+                        numberToAdd.Number = newBonusNumber;
+                        numberToAdd.Prize = newPrize;
+                    }
+                    ImGui.PopFont();
+                    if (ImGui.IsItemHovered())
+                        ImGui.SetTooltip("Add");
+                    
+                    ImGui.EndTable();
+                }
+                
+                // Process add/remove outside the table loop
+                if (numberToRemove >= 0 && numberToRemove < configuration.BonusPrizes.Count)
+                {
+                    configuration.BonusPrizes.RemoveAt(numberToRemove);
+                    configuration.Save();
+                }
+                if (numberToAdd.Number > 0)
+                {
+                    if (!configuration.BonusPrizes.Any(bp => bp.Number == numberToAdd.Number))
+                    {
+                        configuration.BonusPrizes.Add(new BonusPrize { Number = numberToAdd.Number, Prize = numberToAdd.Prize });
+                        configuration.BonusPrizes = configuration.BonusPrizes.OrderBy(bp => bp.Number).ToList();
+                        newBonusNumber = 0;
+                        configuration.Save();
+                    }
+                }
+                
+                ImGui.Spacing();
+                
+                // Channel selection
+                var bonusChannel = configuration.ChatChannels.BonusPrizesChannel;
+                ImGui.SetNextItemWidth(150);
+                if (ImGui.BeginCombo("Announcement Channel", bonusChannel.ToString()))
+                {
+                    foreach (var channel in Enum.GetValues<ChatChannelType>())
+                    {
+                        if (ImGui.Selectable(channel.ToString(), bonusChannel == channel))
+                        {
+                            configuration.ChatChannels.BonusPrizesChannel = channel;
+                            configuration.Save();
+                        }
+                    }
+                    ImGui.EndCombo();
+                }
+                if (ImGui.IsItemHovered())
+                    ImGui.SetTooltip("Channel where bonus prize wins are announced");
+            }
+        }
+        ImGui.EndChild();
+        ModernStyle.PopCardStyle();
+        
+        ImGui.Spacing();
+        
         // Roll Detection and other settings
         ModernStyle.ApplyCardStyle();
-        if (ImGui.BeginChild("DetectionCard", new Vector2(0, 120), true, ImGuiWindowFlags.NoScrollbar))
+        if (ImGui.BeginChild("DetectionCard", new Vector2(0, 135), true, ImGuiWindowFlags.NoScrollbar))
         {
             ImGui.PushFont(UiBuilder.IconFont);
             ImGui.TextColored(ModernStyle.AccentPurple, FontAwesomeIcon.Dice.ToIconString());
@@ -1425,7 +1488,7 @@ public class MainWindow : Window, IDisposable
         
         // Announcement Templates (expandable section)
         ModernStyle.ApplyCardStyle();
-        if (ImGui.BeginChild("AnnouncementCard", new Vector2(0, 150), true, ImGuiWindowFlags.None))
+        if (ImGui.BeginChild("AnnouncementCard", new Vector2(0, 300), true, ImGuiWindowFlags.None))
         {
             ImGui.PushFont(UiBuilder.IconFont);
             ImGui.TextColored(ModernStyle.AccentPurple, FontAwesomeIcon.Bullhorn.ToIconString());
@@ -1471,6 +1534,10 @@ public class MainWindow : Window, IDisposable
                     "Format when a winner passes to the next player");
                 configuration.Announcements.JackpotWinnerResult = DrawAnnouncementInput("Jackpot Winner", configuration.Announcements.JackpotWinnerResult, 
                     "Format for jackpot winner announcements (non-passable)");
+                configuration.Announcements.HighestAsksLowestResult = DrawAnnouncementInput("Highest Asks Lowest", configuration.Announcements.HighestAsksLowestResult, 
+                    "Format when highest roller asks lowest (uses {WINNER_NAME}, {WINNER_ROLL}, {OTHER_WINNER}, {OTHER_ROLL})");
+                configuration.Announcements.BonusPrizeResult = DrawAnnouncementInput("Bonus Prize", configuration.Announcements.BonusPrizeResult, 
+                    "Format for bonus prize summary (uses {BONUS_PRIZE_WINNERS})");
             }
             
             if (ImGui.CollapsingHeader("Available Placeholders"))
@@ -1873,7 +1940,7 @@ public class MainWindow : Window, IDisposable
         
         // Features section
         ModernStyle.ApplyCardStyle();
-        ImGui.BeginChild("AboutFeatures", new Vector2(-1, 200), true);
+        ImGui.BeginChild("AboutFeatures", new Vector2(-1, 235), true);
         
         ImGui.PushFont(UiBuilder.IconFont);
         ImGui.TextColored(ModernStyle.AccentPurple, FontAwesomeIcon.Star.ToIconString());
@@ -1911,7 +1978,7 @@ public class MainWindow : Window, IDisposable
         
         // Usage section
         ModernStyle.ApplyCardStyle();
-        ImGui.BeginChild("AboutUsage", new Vector2(-1, 150), true);
+        ImGui.BeginChild("AboutUsage", new Vector2(-1, 180), true);
         
         ImGui.PushFont(UiBuilder.IconFont);
         ImGui.TextColored(ModernStyle.AccentPurple, FontAwesomeIcon.Play.ToIconString());
@@ -1942,6 +2009,7 @@ public class MainWindow : Window, IDisposable
             WinnerSelectionMode.BottomLowest => "Bottom Lowest",
             WinnerSelectionMode.Random => "Random Selection",
             WinnerSelectionMode.Middle => "Middle Rolls",
+            WinnerSelectionMode.HighestAsksLowest => "Highest Asks Lowest",
             _ => mode.ToString()
         };
     }
@@ -1955,6 +2023,7 @@ public class MainWindow : Window, IDisposable
             WinnerSelectionMode.BottomLowest => "Select the N lowest rolls (e.g., 12, 15 for 2 winners)",
             WinnerSelectionMode.Random => "Randomly select N winners from all participants",
             WinnerSelectionMode.Middle => "Select the middle roll value(s) from all participants",
+            WinnerSelectionMode.HighestAsksLowest => "Highest roller asks the lowest roller — Truth or Dare?",
             _ => "Unknown selection mode"
         };
     }

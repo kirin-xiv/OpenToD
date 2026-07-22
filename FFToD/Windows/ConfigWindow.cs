@@ -65,7 +65,7 @@ public class ConfigWindow : Window, IDisposable
         if (ImGui.CollapsingHeader("Game Settings", ImGuiTreeNodeFlags.DefaultOpen))
         {
             var rollTimeout = configuration.RollTimeout;
-            if (ImGui.SliderInt("Roll Timeout (seconds)", ref rollTimeout, 10, 30))
+            if (ImGui.SliderInt("Roll Timeout (seconds)", ref rollTimeout, 10, 60))
             {
                 configuration.RollTimeout = rollTimeout;
                 configuration.Save();

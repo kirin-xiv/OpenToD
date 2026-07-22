@@ -42,6 +42,7 @@ public sealed class Plugin : IDalamudPlugin
     private bool isRollingPhase = false;
     private readonly Dictionary<string, int> currentRolls = new();
     private readonly Dictionary<string, int> rollOrder = new();
+    private readonly Dictionary<string, (int roll, BonusPrize prize)> bonusPrizeHits = new();
     private int rollCounter = 0;
     private CancellationTokenSource? gameCancellation;
 
@@ -256,6 +257,17 @@ public sealed class Plugin : IDalamudPlugin
             currentRolls[normalizedName] = rollValue;
             rollOrder[normalizedName] = rollCounter++;
             pluginLog.Debug($"Roll recorded: {normalizedName} = {rollValue} (order: {rollOrder[normalizedName]})");
+            
+            // Check for bonus prize hits
+            if (configuration.EnableBonusPrizes)
+            {
+                var matchedPrize = configuration.BonusPrizes.FirstOrDefault(bp => bp.Number == rollValue);
+                if (matchedPrize != null)
+                {
+                    bonusPrizeHits[normalizedName] = (rollValue, matchedPrize);
+                    pluginLog.Debug($"Bonus prize hit: {normalizedName} rolled {rollValue}");
+                }
+            }
         }
     }
 
@@ -422,6 +434,7 @@ public sealed class Plugin : IDalamudPlugin
         currentRolls.Clear();
         rollOrder.Clear(); // Clear roll order tracking
         rollCounter = 0; // Reset roll counter
+        bonusPrizeHits.Clear(); // Clear bonus prize hits
         currentRoundWinners.Clear(); // Clear current round winners
         isJackpotRound = false; // Reset jackpot flag
 
@@ -557,6 +570,22 @@ public sealed class Plugin : IDalamudPlugin
                         currentRoundWinners.Add(randomWinner);
                         break;
 
+                    case WinnerSelectionMode.HighestAsksLowest:
+                        // For single winner count, still pick the pair — highest asks lowest
+                        var highestAsk = FindMultipleWinnersWithTiebreaker(sortedRolls, excludeList, 1).FirstOrDefault();
+                        if (string.IsNullOrEmpty(highestAsk))
+                            highestAsk = FindMultipleWinnersWithTiebreaker(sortedRolls, new List<string>(), 1).FirstOrDefault();
+                        if (!string.IsNullOrEmpty(highestAsk))
+                        {
+                            currentRoundWinners.Add(highestAsk);
+                            var sortedAsc = currentRolls.OrderBy(kvp => kvp.Value).ToList();
+                            var lowExclude = new List<string> { highestAsk };
+                            var lowestAsk = FindMultipleWinnersWithTiebreaker(sortedAsc, lowExclude, 1, true).FirstOrDefault();
+                            if (!string.IsNullOrEmpty(lowestAsk))
+                                currentRoundWinners.Add(lowestAsk);
+                        }
+                        break;
+
                     case WinnerSelectionMode.HighestAndLowest:
                     default:
                         string defaultWinner = FindMultipleWinnersWithTiebreaker(sortedRolls, excludeList, 1).FirstOrDefault();
@@ -609,6 +638,29 @@ public sealed class Plugin : IDalamudPlugin
                                 if (!string.IsNullOrEmpty(nextWinner))
                                     currentRoundWinners.Add(nextWinner);
                             }
+                        }
+                        break;
+
+                    case WinnerSelectionMode.HighestAsksLowest:
+                        string highestAsker = FindMultipleWinnersWithTiebreaker(sortedRolls, excludeList, 1).FirstOrDefault();
+                        if (string.IsNullOrEmpty(highestAsker))
+                            highestAsker = FindMultipleWinnersWithTiebreaker(sortedRolls, new List<string>(), 1).FirstOrDefault();
+
+                        if (!string.IsNullOrEmpty(highestAsker))
+                        {
+                            currentRoundWinners.Add(highestAsker);
+
+                            var sortedAscendingForAsk = currentRolls.OrderBy(kvp => kvp.Value).ToList();
+                            var askExcludeList = new List<string> { highestAsker };
+                            string lowestDoer = FindMultipleWinnersWithTiebreaker(sortedAscendingForAsk, askExcludeList, 1, true).FirstOrDefault();
+                            if (string.IsNullOrEmpty(lowestDoer))
+                            {
+                                askExcludeList = new List<string> { highestAsker };
+                                lowestDoer = FindMultipleWinnersWithTiebreaker(sortedAscendingForAsk, askExcludeList, 1, true).FirstOrDefault();
+                            }
+
+                            if (!string.IsNullOrEmpty(lowestDoer))
+                                currentRoundWinners.Add(lowestDoer);
                         }
                         break;
 
@@ -686,7 +738,16 @@ public sealed class Plugin : IDalamudPlugin
 
                     var resultsChannel = configuration.ChatChannels.GetChannelCommand(configuration.ChatChannels.ResultsChannel);
                     
-                    if (currentRoundWinners.Count == 1)
+                    if (configuration.WinnerMode == WinnerSelectionMode.HighestAsksLowest && currentRoundWinners.Count >= 2)
+                    {
+                        // Highest asks Lowest: first winner is highest (asker), second is lowest (doer)
+                        int askerRoll = currentRolls.TryGetValue(currentRoundWinners[0], out int aRoll) ? aRoll : 0;
+                        int doerRoll = currentRolls.TryGetValue(currentRoundWinners[1], out int dRoll) ? dRoll : 0;
+                        
+                        var summaryMessage = $"{resultsChannel} {ProcessAnnouncementTemplate(configuration.Announcements.HighestAsksLowestResult, currentRoundWinners[0], askerRoll, 1, stripMessage, "", "", currentRoundWinners[1], doerRoll)}";
+                        QueueChatMessage(summaryMessage);
+                    }
+                    else if (currentRoundWinners.Count == 1)
                     {
                         int winnerRoll = currentRolls.TryGetValue(currentRoundWinners[0], out int roll) ? roll : 0;
                         
@@ -706,12 +767,30 @@ public sealed class Plugin : IDalamudPlugin
             }
         }
 
+        // Post bonus prize summary announcement (does not affect round winners)
+        if (configuration.EnableBonusPrizes && bonusPrizeHits.Count > 0 && configuration.AutoPostResults)
+        {
+            var bonusChannel = configuration.ChatChannels.GetChannelCommand(configuration.ChatChannels.BonusPrizesChannel);
+            
+            // Build winners list: "PlayerA (420): 100k gil, PlayerB (911): Fat Cat"
+            var winnerEntries = bonusPrizeHits.Select(hit =>
+            {
+                var (roll, prize) = hit.Value;
+                var label = !string.IsNullOrWhiteSpace(prize.Prize) ? $": {prize.Prize}" : "";
+                return $"{hit.Key} ({roll}){label}";
+            });
+            var winnersList = string.Join(", ", winnerEntries);
+            
+            var bonusMessage = $"{bonusChannel} {ProcessAnnouncementTemplate(configuration.Announcements.BonusPrizeResult, "", 0, 0, "", "", winnersList)}";
+            QueueChatMessage(bonusMessage);
+        }
+
         isGameActive = false;
         
         configuration.Statistics.IncrementRounds();
         configuration.Save();
         
-        pluginLog.Debug($"Game complete. Winners: {string.Join(", ", currentRoundWinners)}. Strip list: {stripMessage}");
+        pluginLog.Debug($"Game complete. Winners: {string.Join(", ", currentRoundWinners)}. Strip list: {stripMessage}. Bonus hits: {bonusPrizeHits.Count}");
     }
 
     public void ClearLastWinner()
@@ -870,12 +949,13 @@ public sealed class Plugin : IDalamudPlugin
         return eligibleCount > 0;
     }
 
+    public IReadOnlyDictionary<string, (int roll, BonusPrize prize)> GetBonusPrizeHits() => bonusPrizeHits;
     public IReadOnlyDictionary<string, int> GetCurrentRolls() => currentRolls;
     public bool IsGameActive => isGameActive;
     public bool IsRollingPhase => isRollingPhase;
     public string GetCurrentRoundWinner() => currentRoundWinners.FirstOrDefault() ?? ""; // Returns first winner for backwards compatibility
 
-    private string ProcessAnnouncementTemplate(string template, string winnerName = "", int winnerRoll = 0, int winnerNumber = 0, string stripMessage = "", string passedFrom = "", string winnersList = "")
+    private string ProcessAnnouncementTemplate(string template, string winnerName = "", int winnerRoll = 0, int winnerNumber = 0, string stripMessage = "", string passedFrom = "", string winnersList = "", string otherWinner = "", int otherRoll = 0)
     {
         var rollInstructions = "High roll ";
         if (configuration.EnableRandomDetection && configuration.EnableDiceDetection)
@@ -901,7 +981,10 @@ public sealed class Plugin : IDalamudPlugin
             .Replace("{WINNERS_LIST}", winnersList)
             .Replace("{STRIPPERS}", stripMessage)
             .Replace("{PASSED_FROM}", passedFrom)
-            .Replace("{JACKPOT_VALUE}", configuration.JackpotValue.ToString());
+            .Replace("{JACKPOT_VALUE}", configuration.JackpotValue.ToString())
+            .Replace("{BONUS_PRIZE_WINNERS}", winnersList)
+            .Replace("{OTHER_WINNER}", otherWinner)
+            .Replace("{OTHER_ROLL}", otherRoll.ToString());
     }
 
     private void ProcessMessageQueue()
@@ -1041,6 +1124,7 @@ public sealed class Plugin : IDalamudPlugin
             (2, WinnerSelectionMode.BottomLowest) => "Bottom 2 players win",
             (2, WinnerSelectionMode.Random) => "2 random players win", 
             (2, WinnerSelectionMode.Middle) => "Middle 2 players win",
+            (_, WinnerSelectionMode.HighestAsksLowest) => "Highest asks lowest",
             
             _ => $"Top {configuration.NumberOfWinners} players win"
         };

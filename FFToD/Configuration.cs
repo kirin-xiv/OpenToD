@@ -16,6 +16,7 @@ public enum WinnerSelectionMode
     BottomLowest,
     Random,
     Middle,
+    HighestAsksLowest,
 }
 
 public enum ChatChannelType
@@ -57,6 +58,7 @@ public class ChatChannelSettings
     public bool UseWinnerSpecificChannels { get; set; } = false;
     
     public ChatChannelType JackpotChannel { get; set; } = ChatChannelType.Yell;
+    public ChatChannelType BonusPrizesChannel { get; set; } = ChatChannelType.Yell;
     
     public string GetChannelCommand(ChatChannelType channel)
     {
@@ -113,6 +115,8 @@ public class AnnouncementTemplates
     public string WinnerSpecificResult { get; set; } = "Winner #{WINNER_NUMBER}: {WINNER_NAME} ({WINNER_ROLL}) | Strippers: {STRIPPERS}";
     public string PassedWinnerResult { get; set; } = "Winner #{WINNER_NUMBER}: {WINNER_NAME} ({WINNER_ROLL}) (passed from {PASSED_FROM}) | Strippers: {STRIPPERS}";
     public string JackpotWinnerResult { get; set; } = "JACKPOT! {WINNER_NAME} rolled {JACKPOT_VALUE}! Host decides their fate! | Strippers: {STRIPPERS}";
+    public string BonusPrizeResult { get; set; } = "Bonus Prizes! {BONUS_PRIZE_WINNERS}";
+    public string HighestAsksLowestResult { get; set; } = "{WINNER_NAME} ({WINNER_ROLL}) asks {OTHER_WINNER} ({OTHER_ROLL}) — Truth or Dare? | Strippers: {STRIPPERS}";
     
     public static readonly Dictionary<string, string> PlaceholderDescriptions = new()
     {
@@ -126,8 +130,18 @@ public class AnnouncementTemplates
         {"{WINNERS_LIST}", "List of all winners with rolls"},
         {"{STRIPPERS}", "List of players who rolled ≤100"},
         {"{PASSED_FROM}", "Name of player who passed their win"},
-        {"{JACKPOT_VALUE}", "The configured jackpot roll number"}
+        {"{JACKPOT_VALUE}", "The configured jackpot roll number"},
+        {"{BONUS_PRIZE_WINNERS}", "List of bonus prize winners, e.g. 'PlayerA (420): 100k gil, PlayerB (911): Fat Cat'"},
+        {"{OTHER_WINNER}", "The other paired player (e.g. lowest roller in HighestAsksLowest mode)"},
+        {"{OTHER_ROLL}", "The other paired player's roll value"}
     };
+}
+
+[Serializable]
+public class BonusPrize
+{
+    public int Number { get; set; }
+    public string Prize { get; set; } = "";
 }
 
 [Serializable]
@@ -148,6 +162,8 @@ public class GameProfile
     public bool EnableRandomDetection { get; set; } = true;
     public int SelectedTheme { get; set; } = 0;
     public AnnouncementTemplates Announcements { get; set; } = new AnnouncementTemplates();
+    public bool EnableBonusPrizes { get; set; } = false;
+    public List<BonusPrize> BonusPrizes { get; set; } = new List<BonusPrize>();
 
     public GameProfile() { }
 
@@ -172,7 +188,8 @@ public class GameProfile
             Winner1Channel = config.ChatChannels.Winner1Channel,
             Winner2Channel = config.ChatChannels.Winner2Channel,
             UseWinnerSpecificChannels = config.ChatChannels.UseWinnerSpecificChannels,
-            JackpotChannel = config.ChatChannels.JackpotChannel
+            JackpotChannel = config.ChatChannels.JackpotChannel,
+            BonusPrizesChannel = config.ChatChannels.BonusPrizesChannel
         };
         EnableDiceDetection = config.EnableDiceDetection;
         EnableRandomDetection = config.EnableRandomDetection;
@@ -196,8 +213,12 @@ public class GameProfile
             MultipleWinnersResult = config.Announcements.MultipleWinnersResult,
             WinnerSpecificResult = config.Announcements.WinnerSpecificResult,
             PassedWinnerResult = config.Announcements.PassedWinnerResult,
-            JackpotWinnerResult = config.Announcements.JackpotWinnerResult
+            JackpotWinnerResult = config.Announcements.JackpotWinnerResult,
+            BonusPrizeResult = config.Announcements.BonusPrizeResult,
+            HighestAsksLowestResult = config.Announcements.HighestAsksLowestResult
         };
+        EnableBonusPrizes = config.EnableBonusPrizes;
+        BonusPrizes = config.BonusPrizes.Select(bp => new BonusPrize { Number = bp.Number, Prize = bp.Prize }).ToList();
     }
 
     public void ApplyToConfiguration(Configuration config)
@@ -219,6 +240,7 @@ public class GameProfile
         config.ChatChannels.Winner2Channel = ChatChannels.Winner2Channel;
         config.ChatChannels.UseWinnerSpecificChannels = ChatChannels.UseWinnerSpecificChannels;
         config.ChatChannels.JackpotChannel = ChatChannels.JackpotChannel;
+        config.ChatChannels.BonusPrizesChannel = ChatChannels.BonusPrizesChannel;
         config.EnableDiceDetection = EnableDiceDetection;
         config.EnableRandomDetection = EnableRandomDetection;
         config.SelectedTheme = SelectedTheme;
@@ -240,6 +262,10 @@ public class GameProfile
         config.Announcements.WinnerSpecificResult = Announcements.WinnerSpecificResult;
         config.Announcements.PassedWinnerResult = Announcements.PassedWinnerResult;
         config.Announcements.JackpotWinnerResult = Announcements.JackpotWinnerResult;
+        config.Announcements.BonusPrizeResult = Announcements.BonusPrizeResult;
+        config.Announcements.HighestAsksLowestResult = Announcements.HighestAsksLowestResult;
+        config.EnableBonusPrizes = EnableBonusPrizes;
+        config.BonusPrizes = BonusPrizes.Select(bp => new BonusPrize { Number = bp.Number, Prize = bp.Prize }).ToList();
     }
 }
 
@@ -264,7 +290,7 @@ public class RoundStatistics
 [Serializable]
 public class Configuration : IPluginConfiguration
 {
-    public int Version { get; set; } = 1;
+    public int Version { get; set; } = 2;
 
     public int RollTimeout { get; set; } = 17;
     public string LocalPlayerName { get; set; } = "";
@@ -282,6 +308,9 @@ public class Configuration : IPluginConfiguration
     
     public bool EnableJackpot { get; set; } = false;
     public int JackpotValue { get; set; } = 666;
+    
+    public bool EnableBonusPrizes { get; set; } = false;
+    public List<BonusPrize> BonusPrizes { get; set; } = new List<BonusPrize>();
     
     public bool AutoPostRules { get; set; } = true;
     public bool AutoPostResults { get; set; } = true;
@@ -308,6 +337,18 @@ public class Configuration : IPluginConfiguration
         if (Statistics == null)
         {
             Statistics = new RoundStatistics();
+        }
+        
+        // Migrate old bonus prize template to new format
+        if (Version < 2)
+        {
+            if (Announcements.BonusPrizeResult.Contains("{BONUS_PRIZE_NUMBER}"))
+            {
+                Announcements.BonusPrizeResult = "Bonus Prizes! {BONUS_PRIZE_WINNERS}";
+            }
+            // Migrate old List<int> BonusPrizeNumbers to List<BonusPrize> BonusPrizes if needed
+            Version = 2;
+            Save();
         }
     }
 
