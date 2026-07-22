@@ -1127,6 +1127,93 @@ public class MainWindow : Window, IDisposable
         
         ImGui.Spacing();
         
+        // Auto-Skip Players
+        ModernStyle.ApplyCardStyle();
+        float autoSkipHeight = configuration.AutoSkipPlayers.Count > 0 ? Math.Min(200f, 55f + configuration.AutoSkipPlayers.Count * 25f) : 70f;
+        if (ImGui.BeginChild("AutoSkipCard", new Vector2(0, autoSkipHeight), true, ImGuiWindowFlags.None))
+        {
+            ImGui.PushFont(UiBuilder.IconFont);
+            ImGui.TextColored(ModernStyle.AccentPurple, FontAwesomeIcon.Forward.ToIconString());
+            ImGui.PopFont();
+            ImGui.SameLine();
+            ImGui.TextColored(ModernStyle.AccentPurple, "Auto-Skip Players");
+            ImGui.Separator();
+            ImGui.Spacing();
+            
+            ImGui.TextColored(ModernStyle.TextSecondary, "These players will be automatically skipped if they win:");
+            ImGui.Spacing();
+            
+            int skipToRemove = -1;
+            string newSkipName = "";
+            
+            if (ImGui.BeginTable("AutoSkipTable", 2, ImGuiTableFlags.SizingFixedFit))
+            {
+                ImGui.TableSetupColumn("Player Name", ImGuiTableColumnFlags.WidthStretch);
+                ImGui.TableSetupColumn("", ImGuiTableColumnFlags.WidthFixed, 35);
+                
+                for (int i = 0; i < configuration.AutoSkipPlayers.Count; i++)
+                {
+                    ImGui.TableNextRow();
+                    ImGui.TableNextColumn();
+                    var name = configuration.AutoSkipPlayers[i] ?? "";
+                    ImGui.SetNextItemWidth(-1);
+                    if (ImGui.InputText($"##AutoSkip{i}", ref name, 60))
+                    {
+                        configuration.AutoSkipPlayers[i] = name;
+                        configuration.Save();
+                    }
+                    ImGui.TableNextColumn();
+                    ImGui.PushFont(UiBuilder.IconFont);
+                    if (ImGui.Button($"{FontAwesomeIcon.Trash.ToIconString()}##DelSkip{i}", new Vector2(25, 20)))
+                    {
+                        skipToRemove = i;
+                    }
+                    ImGui.PopFont();
+                    if (ImGui.IsItemHovered())
+                        ImGui.SetTooltip("Remove");
+                }
+                
+                // Add row
+                ImGui.TableNextRow();
+                ImGui.TableNextColumn();
+                ImGui.SetNextItemWidth(-1);
+                ImGui.InputTextWithHint("##AutoSkipNew", "Enter player name...", ref newSkipName, 60);
+                if (ImGui.IsItemDeactivatedAfterEdit() && !string.IsNullOrWhiteSpace(newSkipName))
+                {
+                    if (!configuration.AutoSkipPlayers.Any(s => s.Equals(newSkipName.Trim(), StringComparison.OrdinalIgnoreCase)))
+                    {
+                        configuration.AutoSkipPlayers.Add(newSkipName.Trim());
+                        configuration.Save();
+                    }
+                }
+                ImGui.TableNextColumn();
+                ImGui.PushFont(UiBuilder.IconFont);
+                if (ImGui.Button($"{FontAwesomeIcon.Plus.ToIconString()}##AddSkip", new Vector2(25, 20)) && !string.IsNullOrWhiteSpace(newSkipName))
+                {
+                    if (!configuration.AutoSkipPlayers.Any(s => s.Equals(newSkipName.Trim(), StringComparison.OrdinalIgnoreCase)))
+                    {
+                        configuration.AutoSkipPlayers.Add(newSkipName.Trim());
+                        configuration.Save();
+                    }
+                }
+                ImGui.PopFont();
+                if (ImGui.IsItemHovered())
+                    ImGui.SetTooltip("Add");
+                
+                ImGui.EndTable();
+            }
+            
+            if (skipToRemove >= 0 && skipToRemove < configuration.AutoSkipPlayers.Count)
+            {
+                configuration.AutoSkipPlayers.RemoveAt(skipToRemove);
+                configuration.Save();
+            }
+        }
+        ImGui.EndChild();
+        ModernStyle.PopCardStyle();
+        
+        ImGui.Spacing();
+        
         // Chat Channel Settings (scrollable for longer content)
         ModernStyle.ApplyCardStyle();
         if (ImGui.BeginChild("ChatChannelCard", new Vector2(0, 145), true, ImGuiWindowFlags.None))

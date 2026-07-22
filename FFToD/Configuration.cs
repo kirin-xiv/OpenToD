@@ -164,6 +164,7 @@ public class GameProfile
     public AnnouncementTemplates Announcements { get; set; } = new AnnouncementTemplates();
     public bool EnableBonusPrizes { get; set; } = false;
     public List<BonusPrize> BonusPrizes { get; set; } = new List<BonusPrize>();
+    public List<string> AutoSkipPlayers { get; set; } = new List<string>();
 
     public GameProfile() { }
 
@@ -219,6 +220,7 @@ public class GameProfile
         };
         EnableBonusPrizes = config.EnableBonusPrizes;
         BonusPrizes = config.BonusPrizes.Select(bp => new BonusPrize { Number = bp.Number, Prize = bp.Prize }).ToList();
+        AutoSkipPlayers = new List<string>(config.AutoSkipPlayers);
     }
 
     public void ApplyToConfiguration(Configuration config)
@@ -266,6 +268,7 @@ public class GameProfile
         config.Announcements.HighestAsksLowestResult = Announcements.HighestAsksLowestResult;
         config.EnableBonusPrizes = EnableBonusPrizes;
         config.BonusPrizes = BonusPrizes.Select(bp => new BonusPrize { Number = bp.Number, Prize = bp.Prize }).ToList();
+        config.AutoSkipPlayers = new List<string>(AutoSkipPlayers);
     }
 }
 
@@ -311,6 +314,8 @@ public class Configuration : IPluginConfiguration
     
     public bool EnableBonusPrizes { get; set; } = false;
     public List<BonusPrize> BonusPrizes { get; set; } = new List<BonusPrize>();
+    
+    public List<string> AutoSkipPlayers { get; set; } = new List<string>();
     
     public bool AutoPostRules { get; set; } = true;
     public bool AutoPostResults { get; set; } = true;
