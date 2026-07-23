@@ -726,7 +726,8 @@ public sealed class Plugin : IDalamudPlugin
                     if (skippedRollers.Count > 0)
                     {
                         var resultsChannel = configuration.ChatChannels.GetChannelCommand(configuration.ChatChannels.ResultsChannel);
-                        QueueChatMessage($"{resultsChannel} Auto-Skipped: {string.Join(", ", skippedRollers)}");
+                        var blastMsg = ProcessAnnouncementTemplate(configuration.Announcements.AutoSkipBlastResult, "", 0, 0, "", "", string.Join(", ", skippedRollers));
+                        QueueChatMessage($"{resultsChannel} {blastMsg}");
                     }
                 }
                 
@@ -1031,7 +1032,8 @@ public sealed class Plugin : IDalamudPlugin
             .Replace("{JACKPOT_VALUE}", configuration.JackpotValue.ToString())
             .Replace("{BONUS_PRIZE_WINNERS}", winnersList)
             .Replace("{OTHER_WINNER}", otherWinner)
-            .Replace("{OTHER_ROLL}", otherRoll.ToString());
+            .Replace("{OTHER_ROLL}", otherRoll.ToString())
+            .Replace("{AUTO_SKIPPED_LIST}", winnersList);
     }
 
     private void ProcessMessageQueue()

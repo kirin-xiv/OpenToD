@@ -117,6 +117,7 @@ public class AnnouncementTemplates
     public string JackpotWinnerResult { get; set; } = "JACKPOT! {WINNER_NAME} rolled {JACKPOT_VALUE}! Host decides their fate! | Strippers: {STRIPPERS}";
     public string BonusPrizeResult { get; set; } = "Bonus Prizes! {BONUS_PRIZE_WINNERS}";
     public string HighestAsksLowestResult { get; set; } = "{WINNER_NAME} ({WINNER_ROLL}) asks {OTHER_WINNER} ({OTHER_ROLL}) — Truth or Dare?{PASSED_FROM} | Strippers: {STRIPPERS}";
+    public string AutoSkipBlastResult { get; set; } = "Auto-Skipped: {AUTO_SKIPPED_LIST}";
     
     public static readonly Dictionary<string, string> PlaceholderDescriptions = new()
     {
@@ -133,7 +134,8 @@ public class AnnouncementTemplates
         {"{JACKPOT_VALUE}", "The configured jackpot roll number"},
         {"{BONUS_PRIZE_WINNERS}", "List of bonus prize winners, e.g. 'PlayerA (420): 100k gil, PlayerB (911): Fat Cat'"},
         {"{OTHER_WINNER}", "The other paired player (e.g. lowest roller in HighestAsksLowest mode)"},
-        {"{OTHER_ROLL}", "The other paired player's roll value"}
+        {"{OTHER_ROLL}", "The other paired player's roll value"},
+        {"{AUTO_SKIPPED_LIST}", "List of auto-skipped players with their rolls, e.g. 'Leonie (141), Kirin (500)'"}
     };
 }
 
@@ -217,7 +219,8 @@ public class GameProfile
             PassedWinnerResult = config.Announcements.PassedWinnerResult,
             JackpotWinnerResult = config.Announcements.JackpotWinnerResult,
             BonusPrizeResult = config.Announcements.BonusPrizeResult,
-            HighestAsksLowestResult = config.Announcements.HighestAsksLowestResult
+            HighestAsksLowestResult = config.Announcements.HighestAsksLowestResult,
+            AutoSkipBlastResult = config.Announcements.AutoSkipBlastResult
         };
         EnableBonusPrizes = config.EnableBonusPrizes;
         BonusPrizes = config.BonusPrizes.Select(bp => new BonusPrize { Number = bp.Number, Prize = bp.Prize }).ToList();
@@ -268,6 +271,7 @@ public class GameProfile
         config.Announcements.JackpotWinnerResult = Announcements.JackpotWinnerResult;
         config.Announcements.BonusPrizeResult = Announcements.BonusPrizeResult;
         config.Announcements.HighestAsksLowestResult = Announcements.HighestAsksLowestResult;
+        config.Announcements.AutoSkipBlastResult = Announcements.AutoSkipBlastResult;
         config.EnableBonusPrizes = EnableBonusPrizes;
         config.BonusPrizes = BonusPrizes.Select(bp => new BonusPrize { Number = bp.Number, Prize = bp.Prize }).ToList();
         config.AutoSkipPlayers = new List<string>(AutoSkipPlayers);

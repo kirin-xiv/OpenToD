@@ -1414,7 +1414,7 @@ public class MainWindow : Window, IDisposable
         
         // Auto-Skip Players
         ModernStyle.ApplyCardStyle();
-        float autoSkipHeight = configuration.AutoSkipPlayers.Count > 0 ? Math.Min(200f, 110f + configuration.AutoSkipPlayers.Count * 25f) : 125f;
+        float autoSkipHeight = configuration.AutoSkipPlayers.Count > 0 ? Math.Min(200f, 125f + configuration.AutoSkipPlayers.Count * 25f) : 150f;
         if (ImGui.BeginChild("AutoSkipCard", new Vector2(0, autoSkipHeight), true, ImGuiWindowFlags.None))
         {
             ImGui.PushFont(UiBuilder.IconFont);
@@ -1460,7 +1460,7 @@ public class MainWindow : Window, IDisposable
                     }
                     ImGui.TableNextColumn();
                     ImGui.PushFont(UiBuilder.IconFont);
-                    if (ImGui.Button($"{FontAwesomeIcon.Trash.ToIconString()}##DelSkip{i}", new Vector2(25, 20)))
+                    if (ImGui.Button($"{FontAwesomeIcon.Trash.ToIconString()}##DelSkip{i}", new Vector2(25, 0)))
                     {
                         skipToRemove = i;
                     }
@@ -1484,7 +1484,7 @@ public class MainWindow : Window, IDisposable
                 }
                 ImGui.TableNextColumn();
                 ImGui.PushFont(UiBuilder.IconFont);
-                if (ImGui.Button($"{FontAwesomeIcon.Plus.ToIconString()}##AddSkip", new Vector2(25, 20)) && !string.IsNullOrWhiteSpace(newSkipName))
+                if (ImGui.Button($"{FontAwesomeIcon.Plus.ToIconString()}##AddSkip", new Vector2(25, 0)) && !string.IsNullOrWhiteSpace(newSkipName))
                 {
                     if (!configuration.AutoSkipPlayers.Any(s => s.Equals(newSkipName.Trim(), StringComparison.OrdinalIgnoreCase)))
                     {
@@ -1562,6 +1562,8 @@ public class MainWindow : Window, IDisposable
                     "Format for jackpot winner announcements (non-passable)");
                 configuration.Announcements.HighestAsksLowestResult = DrawAnnouncementInput("Highest Asks Lowest", configuration.Announcements.HighestAsksLowestResult, 
                     "Format when highest roller asks lowest (uses {WINNER_NAME}, {WINNER_ROLL}, {OTHER_WINNER}, {OTHER_ROLL})");
+                configuration.Announcements.AutoSkipBlastResult = DrawAnnouncementInput("Auto-Skip Blast", configuration.Announcements.AutoSkipBlastResult, 
+                    "Format for auto-skip blast message (uses {AUTO_SKIPPED_LIST})");
                 configuration.Announcements.BonusPrizeResult = DrawAnnouncementInput("Bonus Prize", configuration.Announcements.BonusPrizeResult, 
                     "Format for bonus prize summary (uses {BONUS_PRIZE_WINNERS})");
             }
