@@ -1128,7 +1128,15 @@ public sealed class Plugin : IDalamudPlugin
         QueueChatMessage($"{rulesChannel} {ProcessAnnouncementTemplate(configuration.Announcements.RulesLine2)}");
         QueueChatMessage($"{rulesChannel} {ProcessAnnouncementTemplate(configuration.Announcements.RulesLine3)}");
         QueueChatMessage($"{rulesChannel} {ProcessAnnouncementTemplate(configuration.Announcements.RulesLine4)}");
+        
+        // Extra rules lines for enabled features (before the countdown preamble)
+        if (configuration.EnableJackpot && !string.IsNullOrWhiteSpace(configuration.JackpotRulesLine))
+            QueueChatMessage($"{rulesChannel} {configuration.JackpotRulesLine}");
+        if (configuration.EnableBonusPrizes && !string.IsNullOrWhiteSpace(configuration.BonusPrizeRulesLine))
+            QueueChatMessage($"{rulesChannel} {configuration.BonusPrizeRulesLine}");
+        
         QueueChatMessage($"{rulesChannel} {ProcessAnnouncementTemplate(configuration.Announcements.RulesLine5)}");
+        
         QueueChatMessage($"{countdownChannel} {configuration.Announcements.CountdownStart}");
         QueueChatMessage($"{countdownChannel} {configuration.Announcements.CountdownMiddle}");
         QueueChatMessage($"{countdownChannel} {configuration.Announcements.CountdownEnd}");

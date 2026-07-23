@@ -1173,7 +1173,7 @@ public class MainWindow : Window, IDisposable
         
         // Jackpot Settings
         ModernStyle.ApplyCardStyle();
-        float jackpotCardHeight = configuration.EnableJackpot ? 140f : 85f;
+        float jackpotCardHeight = configuration.EnableJackpot ? 170f : 85f;
         if (ImGui.BeginChild("JackpotCard", new Vector2(0, jackpotCardHeight), true, ImGuiWindowFlags.NoScrollbar))
         {
             ImGui.PushFont(UiBuilder.IconFont);
@@ -1221,6 +1221,16 @@ public class MainWindow : Window, IDisposable
                 }
                 if (ImGui.IsItemHovered())
                     ImGui.SetTooltip("Channel where jackpot wins are announced");
+                
+                ImGui.Spacing();
+                var jackpotRulesLine = configuration.JackpotRulesLine ?? "";
+                if (ImGui.InputTextWithHint("##JackpotRulesLine", "Extra rules line for jackpot rounds...", ref jackpotRulesLine, 200))
+                {
+                    configuration.JackpotRulesLine = jackpotRulesLine;
+                    configuration.Save();
+                }
+                if (ImGui.IsItemHovered())
+                    ImGui.SetTooltip("Optional extra line posted with game rules when Jackpot is enabled");
             }
         }
         ImGui.EndChild();
@@ -1230,7 +1240,7 @@ public class MainWindow : Window, IDisposable
         
         // Bonus Prizes Settings
         ModernStyle.ApplyCardStyle();
-        float bonusCardHeight = configuration.EnableBonusPrizes ? 260f : 85f;
+        float bonusCardHeight = configuration.EnableBonusPrizes ? 290f : 85f;
         if (ImGui.BeginChild("BonusPrizesCard", new Vector2(0, bonusCardHeight), true, ImGuiWindowFlags.None))
         {
             ImGui.PushFont(UiBuilder.IconFont);
@@ -1365,6 +1375,16 @@ public class MainWindow : Window, IDisposable
                 }
                 if (ImGui.IsItemHovered())
                     ImGui.SetTooltip("Channel where bonus prize wins are announced");
+                
+                ImGui.Spacing();
+                var bonusRulesLine = configuration.BonusPrizeRulesLine ?? "";
+                if (ImGui.InputTextWithHint("##BonusRulesLine", "Extra rules line for bonus prize rounds...", ref bonusRulesLine, 200))
+                {
+                    configuration.BonusPrizeRulesLine = bonusRulesLine;
+                    configuration.Save();
+                }
+                if (ImGui.IsItemHovered())
+                    ImGui.SetTooltip("Optional extra line posted with game rules when Bonus Prizes are enabled");
             }
         }
         ImGui.EndChild();

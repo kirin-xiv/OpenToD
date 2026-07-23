@@ -156,6 +156,7 @@ public class GameProfile
     public bool DebugMode { get; set; } = false;
     public bool EnableJackpot { get; set; } = false;
     public int JackpotValue { get; set; } = 666;
+    public string JackpotRulesLine { get; set; } = "";
     public bool AutoPostRules { get; set; } = true;
     public bool AutoPostResults { get; set; } = true;
     public string CustomWiFiMessage { get; set; } = "";
@@ -166,6 +167,7 @@ public class GameProfile
     public AnnouncementTemplates Announcements { get; set; } = new AnnouncementTemplates();
     public bool EnableBonusPrizes { get; set; } = false;
     public List<BonusPrize> BonusPrizes { get; set; } = new List<BonusPrize>();
+    public string BonusPrizeRulesLine { get; set; } = "";
     public List<string> AutoSkipPlayers { get; set; } = new List<string>();
     public bool AutoSkipBlast { get; set; } = true;
 
@@ -180,6 +182,7 @@ public class GameProfile
         DebugMode = config.DebugMode;
         EnableJackpot = config.EnableJackpot;
         JackpotValue = config.JackpotValue;
+        JackpotRulesLine = config.JackpotRulesLine;
         AutoPostRules = config.AutoPostRules;
         AutoPostResults = config.AutoPostResults;
         CustomWiFiMessage = config.CustomWiFiMessage;
@@ -224,6 +227,7 @@ public class GameProfile
         };
         EnableBonusPrizes = config.EnableBonusPrizes;
         BonusPrizes = config.BonusPrizes.Select(bp => new BonusPrize { Number = bp.Number, Prize = bp.Prize }).ToList();
+        BonusPrizeRulesLine = config.BonusPrizeRulesLine;
         AutoSkipPlayers = new List<string>(config.AutoSkipPlayers);
         AutoSkipBlast = config.AutoSkipBlast;
     }
@@ -236,6 +240,7 @@ public class GameProfile
         config.DebugMode = DebugMode;
         config.EnableJackpot = EnableJackpot;
         config.JackpotValue = JackpotValue;
+        config.JackpotRulesLine = JackpotRulesLine;
         config.AutoPostRules = AutoPostRules;
         config.AutoPostResults = AutoPostResults;
         config.CustomWiFiMessage = CustomWiFiMessage;
@@ -274,6 +279,7 @@ public class GameProfile
         config.Announcements.AutoSkipBlastResult = Announcements.AutoSkipBlastResult;
         config.EnableBonusPrizes = EnableBonusPrizes;
         config.BonusPrizes = BonusPrizes.Select(bp => new BonusPrize { Number = bp.Number, Prize = bp.Prize }).ToList();
+        config.BonusPrizeRulesLine = BonusPrizeRulesLine;
         config.AutoSkipPlayers = new List<string>(AutoSkipPlayers);
         config.AutoSkipBlast = AutoSkipBlast;
     }
@@ -318,9 +324,11 @@ public class Configuration : IPluginConfiguration
     
     public bool EnableJackpot { get; set; } = false;
     public int JackpotValue { get; set; } = 666;
+    public string JackpotRulesLine { get; set; } = "";
     
     public bool EnableBonusPrizes { get; set; } = false;
     public List<BonusPrize> BonusPrizes { get; set; } = new List<BonusPrize>();
+    public string BonusPrizeRulesLine { get; set; } = "";
     
     public List<string> AutoSkipPlayers { get; set; } = new List<string>();
     public bool AutoSkipBlast { get; set; } = true;
